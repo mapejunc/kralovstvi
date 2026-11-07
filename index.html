@@ -233,6 +233,9 @@ h1{animation:glow 5s ease-in-out infinite}
 .fc .x{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
 .fmsg{min-height:20px;color:var(--gold);font-size:14px}
 .lnk{background:none;border:0;color:var(--parch-dim);text-decoration:underline;cursor:pointer;font-size:13px;padding:0}
+.dlg{max-height:94vh;overflow:auto}
+.demo{display:block;width:100%;max-width:288px;aspect-ratio:1;margin:2px auto;image-rendering:pixelated;box-shadow:0 0 0 3px #e0b050,0 0 0 5px #8a5a1c,0 0 0 8px var(--edge)}
+.dcap{min-height:44px;margin-top:8px;text-align:center;color:var(--gold);font-weight:600}
 </style>
 <div class="page">
   <header class="top">
@@ -458,7 +461,7 @@ function landmarks(base,topX){
     for(let y=0;y<VH;y++){const a=base-y;if(a<0||a>m)continue;const sg=lmSeg(l,a);if(!sg)continue;
       c.globalAlpha=l.al;sg.forEach(s=>px(s[0],y,s[1]-s[0],1,s[2]||l.col));c.globalAlpha=1;}
     const yt=Math.round(base-m);
-    if(yt>=0&&yt<VH){const got=heightM()>=l.m;c.globalAlpha=got?.9:.45;
+    if(yt>=0&&yt<VH){const got=curHM>=l.m;c.globalAlpha=got?.9:.45;
       for(let x=20;x<topX-2;x+=6)px(x,yt,3,1,got?'#e0b050':'#a79ac8');
       c.globalAlpha=.7;px(19,yt-7,String(l.m).length*4+1,7,'#0a0814');c.globalAlpha=1;
       num(l.m,20,yt-6,got?'#e0b050':'#cfc4e8');}}
@@ -621,7 +624,7 @@ function roofAndTop(roofBase,jt,sn){
   const fc=sn>=14?'#e0b050':'#7a4cb8',fh=sn>=14?'#fff0a0':'#b48ae0',HG=[5,5,5,5,5,4,3,2];
   for(let k=0;k<8;k++){const o=Math.round(Math.sin(T*4+k*.8));px(CX+1+k,ay-10+o,1,HG[k],fc);px(CX+1+k,ay-10+o,1,1,fh);}
   px(CX+3,ay-8+Math.round(Math.sin(T*4+2.4)),1,1,sn>=14?'#7a4cb8':'#e0b050');
-  const r=Math.min(5,S.royalN||0);
+  const r=Math.min(5,curRoyal);
   if(r>=1)px(CX-1,ay-11,3,3,'#e0b050');
   if(r>=2)[-1,1].forEach(sd=>{const x=sd<0?CX-half-5:CX+half-1;px(x,roofBase-11,6,11,'#b3b7c0');px(x,roofBase-11,2,11,'#cfd2da');tri(x+3,roofBase-17,6,3,'#e0b050');});
   if(r>=3){const x0=CX-Math.round(half*.55)-6,y0=roofBase-16;
@@ -698,14 +701,15 @@ function vignette(){
 }
 
 /* ---------- celá scéna ---------- */
-let scaleNow=1;
-function drawScene(now){
-  if(!ctx||!stageEl.clientWidth)return;
-  c=ctx;c.imageSmoothingEnabled=false;c.globalAlpha=1;c.globalCompositeOperation='source-over';T=now;
+let scaleNow=1,curHM=5,curRoyal=0,curGrow=false;
+function drawScene(now,D){
+  if(!D&&(!ctx||!stageEl.clientWidth))return;
+  c=D?D.ctx:ctx;c.imageSmoothingEnabled=false;c.globalAlpha=1;c.globalCompositeOperation='source-over';T=now;
   const dt=new Date();HR=dt.getHours()+dt.getMinutes()/60;WT=weights(HR);prepSky();LW.length=0;LG.length=0;partial=false;
-  const Ff=1+ui.disp,fl=Math.floor(Ff),frac=Ff-fl,Apex=Ff*FH+ROOF,total=Apex+GROUND,P=Math.max(0,VH-total);
-  const camY=Math.min(Math.max(0,stageEl.scrollTop/(scaleNow||1)),Math.max(0,total-VH));
-  const base=Math.round(Apex+P-camY),sn=streakNow(),F=1+nWords();
+  const Ff=1+(D?D.disp:ui.disp),fl=Math.floor(Ff),frac=Ff-fl,Apex=Ff*FH+ROOF,total=Apex+GROUND,P=Math.max(0,VH-total);
+  const camY=D?0:Math.min(Math.max(0,stageEl.scrollTop/(scaleNow||1)),Math.max(0,total-VH));
+  const base=Math.round(Apex+P-camY),sn=D?D.sn:streakNow(),F=D?Math.floor(Ff):1+nWords();
+  curHM=D?Math.round(5*(1+Math.floor(D.disp+1e-6))):heightM();curRoyal=D?D.royal:(S.royalN||0);curGrow=D?D.grow:!!ui.grow;
   /* obloha podle výšky a denní doby */
   for(let y=0;y<VH;y+=2)px(0,y,VW,2,skyAt((base-y-1)/FH*5));
   /* hvězdy */
@@ -740,7 +744,7 @@ function drawScene(now){
   if(base<VH+12){frontDeco(base,sn);walkers(base,F);}
   const roofBase=base-Ff*FH,jt=frac>0?fl:fl-1;
   if(roofBase<VH+30&&roofBase>-70)roofAndTop(Math.round(roofBase),Math.max(0,jt),sn);
-  if(ui.grow){c.globalAlpha=.6;for(let k=0;k<6;k++){const a=k*1.1+T*3;px(CX+Math.cos(a)*(14+k*2),roofBase-2+Math.sin(a*1.7)*3,2,2,'#efe3cc');}c.globalAlpha=1;}
+  if(curGrow){c.globalAlpha=.6;for(let k=0;k<6;k++){const a=k*1.1+T*3;px(CX+Math.cos(a)*(14+k*2),roofBase-2+Math.sin(a*1.7)*3,2,2,'#efe3cc');}c.globalAlpha=1;}
   /* barevné ladění a světla */
   grade();
   lights();
@@ -957,15 +961,36 @@ const TUT=[
  ['Hádej tajné slovo','Každý den je ukryté jedno slovo. Napiš libovolné slovo a stiskni Hádat. Háčky psát nemusíš.'],
  ['Čím žhavěji, tím blíž','Hra hodnotí, jak blízko je tvůj tip významem k tajnému slovu, ne písmeny. Tohle jsou stupně od nejchladnějšího po nejžhavější:','scale'],
  ['Hledej souvislosti','Zkoušej slova ze stejného oboru. Pod tipem se objeví „Společné: …“, což napoví, z jakého oboru tajné slovo je. Třeba u tajného slova „meč“ bude „rytíř“ hořet a „jablko“ zmrzne.'],
- ['Postav hrad','Za každé uhodnuté slovo hrad naroste o patro. Série dní v řadě dává odměny, Královské slovo jednou týdně je za tři patra a po slově dne si můžeš zahrát extra slova.']
+ ['Postav hrad','Za každé uhodnuté slovo hrad naroste o patro (+5 m). Podívej, jak to vypadá:','demo'],
+ ['Série a účet','Série dní v řadě dává odměny: pochodně, prapory, hradby. Královské slovo jednou týdně je za tři patra a po slově dne si můžeš zahrát extra slova. Postup se ukládá k tvému účtu přes Google, takže hned po návodu se přihlásíš.']
 ];
 let tutEl=null;
 function tutKey(e){if(e.key==='Escape')closeTut();}
-function closeTut(){if(tutEl){tutEl.remove();tutEl=null;}document.removeEventListener('keydown',tutKey);try{localStorage.setItem('sk-tut-v1','1');}catch(e){}}
+let demoStop=null;
+function stopDemo(){if(demoStop){demoStop();demoStop=null;}}
+/* ukázka v tutoriálu: stejná scéna hradu na vlastním plátně, hrad se po „uhodnutých“ slovech staví patro po patře */
+function runDemo(cv,cap){
+  cv.width=VW;cv.height=VH;
+  const D={ctx:cv.getContext('2d'),disp:0,sn:3,royal:0,grow:false};
+  const W=['král','trůn','rytíř','meč'],N=W.length,STEP=2400,t0=performance.now();let raf=0,on=true;
+  const step=now=>{
+    if(!on)return;
+    const e=reduce?(N*STEP+STEP*.5):(now-t0),tt=e%((N+1)*STEP),k=Math.floor(tt/STEP),ph=(tt%STEP)/STEP;
+    const g=k>=N?1:cl01((ph-.4)/.4),ease=1-Math.pow(1-g,3);
+    D.disp=k>=N?N:k+ease;D.grow=k<N&&g>0&&g<1;
+    cap.textContent=k>=N?'A tak to jde dál, slovo po slovu.':ph<.4?'Hádáš: '+W[k]+'…':'Uhodnuto! +1 patro, hrad měří '+(5*(2+k))+' m.';
+    drawScene(now/1000,D);
+    if(!reduce)raf=requestAnimationFrame(step);
+  };
+  raf=requestAnimationFrame(step);
+  return()=>{on=false;cancelAnimationFrame(raf);};
+}
+function closeTut(){stopDemo();if(tutEl){tutEl.remove();tutEl=null;}document.removeEventListener('keydown',tutKey);try{localStorage.setItem('sk-tut-v1','1');}catch(e){}
+  if(!fbUser&&!gateEl)showGate('loading','Načítám tvůj účet…');}
 function tutBtn(txt,cls,fn){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=txt;b.addEventListener('click',fn);return b;}
 function openTut(i){
-  if(tutEl)tutEl.remove();
-  const t=TUT[i],ov=document.createElement('div');ov.className='ov';tutEl=ov;
+  stopDemo();if(tutEl)tutEl.remove();
+  const t=TUT[i],ov=document.createElement('div');ov.className='ov';ov.style.zIndex='100';tutEl=ov;
   ov.addEventListener('click',e=>{if(e.target===ov)closeTut();});
   const d=document.createElement('div');d.className='dlg';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Jak se hraje');
   const st=document.createElement('div');st.className='dst';st.textContent='Krok '+(i+1)+' z '+TUT.length;
@@ -975,9 +1000,11 @@ function openTut(i){
   if(t[2]==='scale'){const sc=document.createElement('div');sc.className='dsc';
     ST.slice().reverse().forEach(x=>{const c=document.createElement('span');c.textContent=x[1];c.style.setProperty('--hc',x[2]);sc.appendChild(c);});d.appendChild(sc);}
   const a=document.createElement('div');a.className='acts';
+  if(t[2]==='demo'){const cv=document.createElement('canvas');cv.className='demo';cv.setAttribute('role','img');cv.setAttribute('aria-label','Ukázka: hrad roste s každým uhodnutým slovem');
+    const cap=document.createElement('div');cap.className='dcap';d.appendChild(cv);d.appendChild(cap);demoStop=runDemo(cv,cap);}
   if(i>0)a.appendChild(tutBtn('Zpět','btn ghost',()=>openTut(i-1)));
   const last=i>=TUT.length-1;
-  const nx=tutBtn(last?'Jdu hrát':'Další','btn',()=>{if(last)closeTut();else openTut(i+1);});a.appendChild(nx);
+  const nx=tutBtn(last?(fbUser?'Jdu hrát':'Přihlásit se'):'Další','btn',()=>{if(last)closeTut();else openTut(i+1);});a.appendChild(nx);
   if(!last)a.appendChild(tutBtn('Přeskočit','btn ghost',closeTut));
   d.appendChild(a);ov.appendChild(d);document.body.appendChild(ov);
   document.removeEventListener('keydown',tutKey);document.addEventListener('keydown',tutKey);
@@ -1370,7 +1397,8 @@ if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
 initCastle();
 renderTools();updUnk();
 {const eb=$('expUnk');if(eb)eb.addEventListener('click',expUnk);}
-showGate('loading','Načítám tvůj účet…');
+let tutSeen=true;try{tutSeen=!!localStorage.getItem('sk-tut-v1');}catch(e){}
+if(tutSeen)showGate('loading','Načítám tvůj účet…');
 fbWatch().catch(e=>{console.warn('Přihlášení se nenačetlo:',e);showGate('login','Nepodařilo se spojit s přihlášením. Zkontroluj připojení a zkus to znovu.');});
 setTimeout(()=>{if(gateMode==='loading'&&!fbUser)showGate('login','Načítání účtu trvá dlouho. Zkus se přihlásit.');},10000);
 try{if(!localStorage.getItem('sk-tut-v1'))openTut(0);}catch(e){}
