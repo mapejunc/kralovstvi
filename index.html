@@ -171,6 +171,7 @@ h1{background:linear-gradient(#fff3c4,#e0b050 55%,#a8742a);-webkit-background-cl
 (function(){
 'use strict';
 const MULT=31;
+const USE_AI=false;               /* true = neznámá slova hodnotí AI (pomalejší), false = hned nízká úroveň */
 const EXTRA_WORDS=true;           /* false = jen jedno slovo denně, bez extra slov */
 const SC=2, PW=56, PAD=24, H=150, GY=120, EB=132;
 const KEY='slovni-kralovstvi-v1';
@@ -731,9 +732,9 @@ async function askAI(C,w){
   const parse=t=>{const o=JSON.parse((String(t).match(/\{[\s\S]*\}/)||[''])[0]);
     return{real:!!o.real,rank:Math.max(2,Math.round(Math.pow(1-Math.min(99,+o.score||0)/100,1.8)*V.length)),hint:String(o.hint||'').slice(0,80)};};
   const racers=[];
-  if(window.fbAsk)racers.push(withTO(window.fbAsk(P),7000).then(parse));
+  if(window.fbAsk)racers.push(withTO(window.fbAsk(P),3500).then(parse));
   else window.lastAIError='Firebase AI se nenačetla'+(window.fbErr?' ('+window.fbErr+')':'')+'.';
-  racers.push(withTO(fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-5-5",max_tokens:150,messages:[{role:"user",content:P}]})}),7000)
+  racers.push(withTO(fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-5-5",max_tokens:150,messages:[{role:"user",content:P}]})}),3500)
     .then(r=>r.json()).then(d=>parse(d.content.map(i=>i.text||'').join(''))));
   try{
     const r=await Promise.any(racers);
@@ -749,11 +750,16 @@ async function submit(e){
   if(!k)return;
   if(C.st.g.indexOf(k)>=0){setMsg('Tohle už jsi zkoušel.',1800);return;}
   if(!VI[k]){
-    busyAI=true;setMsg('Písař listuje slovníkem…');
-    const r=await askAI(C,raw);busyAI=false;
-    if(cur!==C)return;
-    if(!r){setMsg(/debug/.test(location.search)?'Důvod: '+String(window.lastAIError||'neznámý').slice(0,260):'Písař má právě plné ruce. Zkus to za chvilku nebo napiš jiné slovo.',6000);return;}
-    if(!r.real){setMsg('Tohle není české slovo.',2400);return;}
+    /* slovo mimo slovník: hned ho přijmeme jako velmi vzdálené, bez čekání na AI */
+    if(!/^[a-zA-Z\u00C0-\u017F]{2,24}$/.test(raw)){setMsg('Tohle není slovo.',2000);return;}
+    let r=null;
+    if(USE_AI){
+      busyAI=true;setMsg('Písař listuje slovníkem…');
+      r=await askAI(C,raw);busyAI=false;
+      if(cur!==C)return;
+      if(r&&!r.real){setMsg('Tohle není české slovo.',2400);return;}
+    }
+    if(!r)r={real:true,rank:Math.round(V.length*.9),hint:''};
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
   C.st.g.push(k);gi.value='';setMsg('');
