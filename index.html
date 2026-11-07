@@ -1,0 +1,827 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Slovní království</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: široká pixel-art scéna království nahoře (posouvá se do stran), pod ní úzký sloupec s hádáním slov.
+   Vzhled je záměrně jen tmavý: večerní fialová, dřevo a zlato z předlohy. */
+:root{
+  --night:#1d1626; --night-2:#2a2034; --edge:#0f0a15; --edge-hi:#46385a;
+  --wood:#4a3224; --wood-hi:#6b4a33;
+  --parch:#efe3cc; --parch-dim:#b7a98f;
+  --banner:#7a4cb8; --banner-hi:#b48ae0; --gold:#e0b050; --ok:#5d9e47; --miss:#3a2f45;
+  --font:'Pixelify Sans', ui-monospace, 'Courier New', monospace;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--night); color:var(--parch); font-family:var(--font); font-size:16px; line-height:1.45; margin:0;
+  padding-block:20px 40px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+button{font-family:inherit}
+.page{max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:22px}
+.top{display:flex; flex-wrap:wrap; gap:14px 24px; align-items:flex-end; justify-content:space-between}
+h1{font-size:clamp(28px,7vw,40px); line-height:1.05; margin:0; font-weight:700; letter-spacing:.01em; text-wrap:balance}
+.tag{margin:6px 0 0; color:var(--parch-dim); max-width:46ch}
+.stats{display:flex; gap:10px}
+.stat{background:var(--night-2); box-shadow:0 0 0 2px var(--edge), 0 3px 0 2px var(--edge); padding:8px 14px; display:flex; flex-direction:column; gap:2px; min-width:92px}
+.stat b{font-size:26px; line-height:1; font-variant-numeric:tabular-nums}
+.stat span{font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--parch-dim)}
+.stat.gold b{color:var(--gold)}
+.stat.has{box-shadow:0 0 0 2px var(--gold), 0 3px 0 2px var(--edge)}
+
+.stage-head{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; justify-content:space-between; margin-bottom:10px}
+.tabs{display:flex; gap:8px; flex-wrap:wrap}
+.tab{color:var(--parch); background:var(--night-2); border:0; padding:8px 14px; font-size:16px; cursor:pointer; box-shadow:0 0 0 2px var(--edge), 0 3px 0 2px var(--edge)}
+.tab small{margin-left:8px; color:var(--parch-dim); font-size:14px; font-variant-numeric:tabular-nums}
+.tab[aria-selected="true"]{background:var(--banner)}
+.tab[aria-selected="true"] small{color:#e6d9f7}
+.tab:disabled{opacity:.5; cursor:not-allowed}
+.prog{color:var(--parch-dim); font-size:14px}
+.stage{overflow-x:auto; background:#000; box-shadow:0 0 0 3px var(--edge); scrollbar-color:var(--wood-hi) var(--edge)}
+.stage-in{position:relative; width:max-content}
+#scene{display:block; image-rendering:pixelated}
+#plots{position:absolute; inset:0}
+.plot{position:absolute; top:0; height:100%; background:none; border:0; padding:0; cursor:pointer}
+.plot:hover{background:rgba(255,255,255,.07)}
+.plot:focus-visible{outline:3px solid var(--gold); outline-offset:-3px}
+
+.panel{margin-top:12px; background:var(--night-2); box-shadow:0 0 0 2px var(--edge), 0 3px 0 2px var(--edge); padding:14px 16px; min-height:96px; display:flex; flex-direction:column; gap:12px}
+.panel p{margin:0}
+.panel .lead{color:var(--parch-dim)}
+.up{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; justify-content:space-between; background:var(--wood); padding:12px 14px; box-shadow:0 0 0 2px var(--edge)}
+.up b{font-size:18px}
+.info b{font-size:20px}
+.picks{display:flex; gap:10px; overflow-x:auto; padding:2px 2px 8px; scroll-snap-type:x proximity; scrollbar-color:var(--wood-hi) var(--edge)}
+.pick{flex:0 0 auto; scroll-snap-align:start; width:100px; padding:8px 8px 10px; background:var(--wood); color:var(--parch); border:0; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:6px; box-shadow:0 0 0 2px var(--edge), 0 3px 0 2px var(--edge)}
+.pick:hover{background:var(--wood-hi)}
+.pick:focus-visible{outline:3px solid var(--gold); outline-offset:2px}
+.pick canvas{width:84px; height:156px; image-rendering:pixelated; display:block}
+.pick span{font-size:14px; font-weight:600; text-align:center; line-height:1.15}
+
+.btn{background:var(--banner); color:#fff; border:0; padding:10px 18px; font-size:16px; font-weight:600; cursor:pointer; box-shadow:0 0 0 2px var(--edge), 0 4px 0 2px var(--edge)}
+.btn:hover{background:#8a5cc8}
+.btn:active{transform:translateY(2px); box-shadow:0 0 0 2px var(--edge), 0 2px 0 2px var(--edge)}
+.btn:focus-visible,.key:focus-visible{outline:3px solid var(--gold); outline-offset:2px}
+.btn.ghost{background:var(--wood)}
+.btn.ghost:hover{background:var(--wood-hi)}
+
+.game{width:100%; max-width:520px; margin:0 auto}
+.game h2{font-size:24px; margin:0 0 2px; line-height:1.1}
+.meta{display:flex; flex-wrap:wrap; justify-content:space-between; gap:2px 12px; color:var(--parch-dim); font-size:14px}
+.board{display:grid; gap:6px; max-width:340px; margin:16px auto 8px}
+.row{display:grid; grid-template-columns:repeat(5,1fr); gap:6px}
+.tile{aspect-ratio:1; display:grid; place-items:center; font-size:clamp(24px,8vw,34px); font-weight:700; background:var(--night-2); box-shadow:0 0 0 2px var(--edge-hi); user-select:none}
+.tile.filled{box-shadow:0 0 0 2px var(--parch-dim); animation:pop .1s ease-out}
+.tile.c{background:var(--ok); color:#fff; box-shadow:0 0 0 2px #3c6b2e, inset 0 -4px 0 rgba(0,0,0,.25)}
+.tile.p{background:var(--gold); color:#2a1d10; box-shadow:0 0 0 2px #a8812e, inset 0 -4px 0 rgba(0,0,0,.2)}
+.tile.x{background:var(--miss); color:var(--parch-dim); box-shadow:0 0 0 2px #2c2336}
+.tile.flipping{animation:flip .5s ease-in-out}
+.row.shake{animation:shake .4s}
+@keyframes pop{from{transform:scale(.88)} to{transform:scale(1)}}
+@keyframes flip{0%{transform:scaleY(1)} 50%{transform:scaleY(0)} 100%{transform:scaleY(1)}}
+@keyframes shake{20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)}}
+.msg{min-height:26px; text-align:center; color:var(--gold); font-weight:600; margin-bottom:4px}
+.result{background:var(--night-2); box-shadow:0 0 0 2px var(--edge), 0 3px 0 2px var(--edge); padding:14px 16px; margin:4px 0 16px; display:flex; flex-direction:column; gap:10px}
+.result p{margin:0}
+.result .rt{font-size:20px; font-weight:700}
+.answer{color:var(--gold); letter-spacing:.12em}
+.acts{display:flex; flex-wrap:wrap; gap:10px}
+.cd{color:var(--parch-dim); font-size:14px}
+.cd b{color:var(--parch); font-variant-numeric:tabular-nums}
+.kb{display:grid; gap:6px}
+.kr{display:flex; gap:5px; justify-content:center}
+.key{flex:1 1 0; min-width:0; height:50px; background:#4b3c5e; color:var(--parch); border:0; font-size:17px; font-weight:600; cursor:pointer; text-transform:uppercase; touch-action:manipulation; box-shadow:0 3px 0 var(--edge)}
+.key.wide{flex:1.7 1 0; font-size:12px; text-transform:none; letter-spacing:.02em}
+.key.c{background:var(--ok); color:#fff}
+.key.p{background:var(--gold); color:#2a1d10}
+.key.x{background:#241c2d; color:#6f6380}
+.key:active{transform:translateY(2px); box-shadow:0 1px 0 var(--edge)}
+.foot{text-align:center; color:var(--parch-dim); font-size:13px; max-width:60ch; margin:0 auto}
+@media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
+</style>
+
+<style>
+body{background:radial-gradient(ellipse at 50% -10%,#4b2f6e 0,#2a1d3f 38%,#150f1e 100%) fixed}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(#fff8 1px,transparent 1.5px),radial-gradient(#f2c14e88 1px,transparent 1.5px);background-size:90px 90px,140px 140px;background-position:0 0,40px 55px;opacity:.35}
+.page{position:relative}
+h1{background:linear-gradient(#fff3c4,#e0b050 55%,#a8742a);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #0f0a15)}
+.stat{background:linear-gradient(#34283f,#2a2034)}
+.stage{box-shadow:0 0 0 3px #e0b050,0 0 0 6px var(--edge),0 18px 40px #0009}
+.stage-in::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,#0006 100%)}
+.panel{background:linear-gradient(#2e2340,#241b32)}
+.game{background:linear-gradient(#2e2340,#221a30);padding:20px 18px 22px;box-shadow:0 0 0 2px var(--edge),0 0 0 4px var(--edge-hi),0 14px 30px #0008}
+.modes{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0}
+.gform{display:flex;gap:8px;margin:14px 0 6px}
+.gform input{flex:1;min-width:0;font:inherit;font-size:20px;padding:11px 14px;background:#150f1e;color:var(--parch);border:0;box-shadow:inset 0 0 0 2px var(--edge-hi);outline:0}
+.gform input:focus{box-shadow:inset 0 0 0 2px var(--gold),0 0 14px #e0b05055}
+.guesses{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.gs{background:#1a1324;padding:10px 12px;box-shadow:inset 4px 0 0 var(--hc),0 0 0 2px var(--edge);display:grid;gap:6px}
+.gs.last{box-shadow:inset 4px 0 0 var(--hc),0 0 0 2px var(--hc),0 0 18px color-mix(in srgb,var(--hc) 45%,transparent);animation:pop .25s ease-out}
+.gw{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.gw b{font-size:21px}.gw span{color:var(--hc);font-weight:600;font-size:14px;text-align:right}
+.gb{height:10px;background:#0f0a15;box-shadow:inset 0 0 0 2px #000}
+.gb i{display:block;height:100%;background:var(--hc);box-shadow:inset 0 -3px 0 #0003;transition:width .5s}
+.gs p{margin:0;color:var(--parch-dim);font-size:14px}
+</style>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Slovní království</h1>
+      <p class="tag">Hádej tajné slovo. Čím blíž významem, tím žhavěji hoří království. Uhodneš a dostaneš dílek na stavbu.</p>
+    </div>
+    <div class="stats">
+      <div class="stat gold" id="stPieces"><b id="nPieces">0</b><span>Dílky</span></div>
+      <div class="stat"><b id="nWon">0</b><span>Slova</span></div>
+    </div>
+  </header>
+
+  <section aria-label="Království">
+    <div class="stage-head">
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <div class="prog" id="prog"></div>
+    </div>
+    <div class="stage" id="stage">
+      <div class="stage-in">
+        <canvas id="scene" role="img" aria-label="Pixelové království"></canvas>
+        <div id="plots"></div>
+      </div>
+    </div>
+    <div class="panel" id="panel"></div>
+  </section>
+
+  <section class="game" aria-label="Hádání slov">
+    <h2 id="gTitle">Slovo dne</h2>
+    <div class="meta"><span id="gDate"></span><span>Háčky a čárky psát nemusíš</span></div>
+    <div class="modes" id="modes"></div>
+    <form class="gform" id="gf" autocomplete="off"><input id="gi" type="text" maxlength="24" placeholder="Zadej slovo…" aria-label="Tvůj tip" autocapitalize="off" spellcheck="false"><button class="btn" type="submit">Hádat</button></form>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+    <div class="result" id="result" hidden></div>
+    <div class="guesses" id="guesses"></div>
+  </section>
+
+  <p class="foot">Slovo dne se mění o půlnoci. Postup království se ukládá jen v tomto prohlížeči.</p>
+</div>
+
+<script>
+(function(){
+'use strict';
+const MULT=31;
+const EXTRA_WORDS=true;           /* false = jen jedno slovo denně, bez extra slov */
+const SC=2, PW=56, PAD=24, H=150, GY=120, EB=132;
+const KEY='slovni-kralovstvi-v1';
+const reduce=!!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const $=id=>document.getElementById(id);
+const strip=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
+
+/* ---------- barvy a úrovně ---------- */
+const K={wood:'#7a4a2b',woodD:'#4f2f1c',woodL:'#a8693a',thatch:'#d9b866',thatchD:'#b08f40',stone:'#8b8f98',stoneD:'#5d616b',stoneL:'#b3b7c0',
+  red:'#9a3b34',redL:'#c25a4c',purple:'#6b3fa0',purpleL:'#b48ae0',white:'#f1ece0',door:'#2b1a10',glow:'#f2c14e',gold:'#e0b050',
+  skin:'#e7b98f',rope:'#c9b27a',dark:'#2a1d17',orange:'#f08a2c',wheat:'#d8b24a',wheatD:'#bb8f2e',parch:'#efe3cc',slate:'#4c4f63',slateL:'#5b5e75'};
+const PAL=[
+ {sky:['#a89c96','#b4a8a0','#c0b4a8','#ccc0b1','#d8ccba','#e2d6c2'],hillFar:'#a29aa4',hillNear:'#85808c',tree:'#59606a',wall:'#6f6a74',wallHi:'#8b8591',cloud:'#efe9dc',cloudSh:'#cdc4b4',water:'#26344a',rip:'#9db3d0',earth:'#6b4524'},
+ {sky:['#5f4f8c','#7a5c94','#a06c98','#c9808f','#e49f88','#f3c78e'],hillFar:'#8a6c98',hillNear:'#5f4d7e',tree:'#3f3562',wall:'#5a4d70',wallHi:'#7a6a92',cloud:'#f8d8aa',cloudSh:'#c58a9e',water:'#352b52',rip:'#d9a8c8',earth:'#5c3a22'}
+];
+const LEVELS=[
+ {name:'Vesnice',plots:10,list:['hut','field','well','tower','market','palisade','forge','range','fire']},
+ {name:'Hrad',plots:12,list:['keep','wall','gate','cathedral','alchemy','barracks','mill','hall']}
+];
+const BLD={
+ fire:{n:'Táborák',d:'Kolem ohně se schází celá osada.',draw:dFire},
+ hut:{n:'Chalupa',d:'Střecha nad hlavou pro nové obyvatele.',draw:dHut},
+ field:{n:'Pole',d:'Zlatý ječmen, ze kterého bude chleba.',draw:dField},
+ well:{n:'Studna',d:'Čistá voda pro lidi i dobytek.',draw:dWell},
+ tower:{n:'Hlásná věž',d:'Hlídka vidí nepřítele dřív než on tebe.',draw:dTower},
+ market:{n:'Trh',d:'Jablka, chleba a ryby. Kupci si cestu najdou.',draw:dMarket},
+ palisade:{n:'Palisáda',d:'Dřevěný plot proti vlkům i lupičům.',draw:dPalisade},
+ forge:{n:'Kovárna',d:'Meče, podkovy a hřebíky ze žhavého železa.',draw:dForge},
+ range:{n:'Lučiště',d:'Tady se cvičí střelci z celého kraje.',draw:dRange},
+ keep:{n:'Kamenná věž',d:'Pevná věž s výhledem na celé království.',draw:dKeep},
+ wall:{n:'Hradba',d:'Kamenné cimbuří, po kterém obchází stráž.',draw:dWall},
+ gate:{n:'Hradní brána',d:'Za mřížemi začíná tvoje království.',draw:dGate},
+ cathedral:{n:'Katedrála',d:'Vitráže, zvony a vysoká střela do nebe.',draw:dCathedral},
+ alchemy:{n:'Alchymistická věž',d:'Nad střechou se vznáší zvláštní světlo.',draw:dAlchemy},
+ barracks:{n:'Kasárna',d:'Štíty, kopí a rota připravená k boji.',draw:dBarracks},
+ mill:{n:'Větrný mlýn',d:'Mele obilí z polí celého kraje.',draw:dMill},
+ hall:{n:'Velká síň',d:'Srdce království. Tady se hoduje a rozhoduje.',draw:dHall}
+};
+const CHEER=['Jedním pokusem!','Skvěle!','Výborně!','Pěkně!','Uf, těsně!','Na poslední chvíli!'];
+
+/* ---------- uložený stav ---------- */
+function plotsOf(n,free){const a=Array(n).fill(null);a[0]=free;return a;}
+function fresh(){return{v:1,won:0,daily:0,spent:0,level:0,unlocked:0,plots:[plotsOf(10,'fire'),plotsOf(12,'gate')],day:null,bonus:null};}
+function load(){try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);if(o&&o.v===1&&Array.isArray(o.plots)&&o.plots.length===2)return o;}}catch(e){}return fresh();}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+let S=load();
+const filled=lv=>S.plots[lv].filter(Boolean).length;
+const avail=()=>S.won-S.spent;
+const sceneW=lv=>PAD*2+LEVELS[lv].plots*PW;
+const ui={sel:null};
+
+/* ---------- kreslení (pixel art) ---------- */
+const canvasEl=$('scene'); let ctx=null;
+let c=null, ox=0, gy=GY, T=0;
+const U=(dx,top,w,h,col)=>{c.fillStyle=col;c.fillRect(Math.round(ox+dx),Math.round(gy-top),Math.round(w),Math.round(h));};
+function TRI(dx,base,w,hr,col,step,alt){for(let i=0;i<hr;i++){const ww=Math.round(w-2*i*step);if(ww<=0)break;U(dx+Math.round(i*step),base+i+1,ww,1,(alt&&i%3===0)?alt:col);}}
+function bricks(dx,top,w,h,line){line=line||K.stoneD;for(let y=0;y<h;y+=5){U(dx,top-y,w,1,line);const off=((y/5)%2)*4;for(let x=dx+off;x<dx+w;x+=8)U(x,top-y,1,5,line);}}
+function disc(cx,cy,r,col,al){c.globalAlpha=al==null?1:al;for(let dy=-r;dy<=r;dy++){const half=Math.floor(Math.sqrt(r*r-dy*dy));U(cx-half,cy+dy,half*2+1,1,col);}c.globalAlpha=1;}
+function smoke(dx,top,col){for(let k=0;k<3;k++){const ph=(T*.5+k/3)%1;c.globalAlpha=.6*(1-ph);U(dx+Math.sin((T+k)*1.5)*2+ph*3,top+ph*16,2+ph*2,2+ph*2,col||'#e6e1d8');}c.globalAlpha=1;}
+function flag(dx,top,w,h,col){for(let k=0;k<w;k++)U(dx+k,top+Math.round(Math.sin(T*4+k*.7)*1),1,h,col);}
+function PERSON(x,y,col,dir,t,o){o=o||{};x=Math.round(x);y=Math.round(y);const st=Math.floor(t*6)%2;
+  c.fillStyle='#2b2430';c.fillRect(x-1,y-3,1,st?3:2);c.fillRect(x+1,y-3,1,st?2:3);
+  if(o.cape){c.fillStyle=K.purple;c.fillRect(x-dir*2,y-8,2,6);}
+  c.fillStyle=col;c.fillRect(x-1,y-7,3,4);
+  c.fillStyle=K.skin;c.fillRect(x-1,y-10,3,3);
+  c.fillStyle=o.hair||'#4a3322';c.fillRect(x-1,y-10,3,1);
+  c.fillStyle='#2a1d17';c.fillRect(x+(dir>0?1:-1),y-9,1,1);
+  if(o.crown){c.fillStyle=K.gold;c.fillRect(x-1,y-12,3,2);c.fillRect(x-1,y-13,1,1);c.fillRect(x+1,y-13,1,1);}
+  if(o.hat){c.fillStyle=o.hat;c.fillRect(x-2,y-11,5,1);c.fillRect(x-1,y-12,3,1);}
+}
+
+/* úroveň 1 */
+function dHut(){
+  U(38,36,5,22,K.stone);
+  smoke(39,38);
+  U(8,18,40,18,K.wood);
+  for(let x=8;x<48;x+=4)U(x,18,1,18,K.woodD);
+  TRI(3,18,50,23,K.thatch,1,K.thatchD);
+  U(8,17,40,2,'rgba(0,0,0,.28)');
+  U(23,12,9,12,K.door);U(24,13,7,1,K.door);
+  U(13,15,7,7,K.woodD);U(14,14,5,5,K.glow);U(16,14,1,5,K.woodD);U(14,17,5,1,K.woodD);
+}
+function dField(){
+  for(let i=0;i<16;i++){const x=3+i*3,h=9+((i*7)%4),sw=Math.round(Math.sin(T*2+i)*.7);
+    U(x,h,2,h,i%2?K.wheat:K.wheatD);U(x+sw,h+3,2,3,'#f0cf6a');}
+  U(27,27,2,27,K.woodD);U(21,22,14,2,K.woodD);
+  U(25,28,6,6,'#7a8fb0');
+  U(26,35,4,4,K.skin);U(24,37,8,2,K.woodD);U(26,40,4,3,K.woodD);
+  U(27,33,1,1,K.dark);U(29,33,1,1,K.dark);
+}
+function dWell(){
+  U(18,12,20,12,K.stone);
+  for(let y=0;y<12;y+=4){U(18,12-y,20,1,K.stoneD);for(let x=18+((y/4)%2)*5;x<38;x+=10)U(x,12-y,1,4,K.stoneD);}
+  U(18,12,20,2,K.stoneL);U(20,12,16,1,'#1c2a3a');
+  U(19,34,2,22,K.wood);U(35,34,2,22,K.wood);U(17,32,22,2,K.woodD);
+  TRI(14,32,28,10,K.red,1.4,K.redL);
+  U(28,32,1,11,K.rope);U(26,21,5,4,K.woodL);U(27,21,3,1,K.woodD);
+}
+function dTower(){
+  U(17,40,4,40,K.wood);U(35,40,4,40,K.wood);
+  for(let i=0;i<14;i++){U(21+i,6+i*2,1,2,K.woodD);U(34-i,6+i*2,1,2,K.woodD);}
+  U(12,44,32,3,K.woodL);U(12,44,32,1,K.woodD);
+  PERSON(ox+27,gy-44,'#4f7c9e',1,0,{hat:'#6a8f4a'});
+  U(12,54,2,10,K.wood);U(42,54,2,10,K.wood);U(12,54,32,1,K.woodL);
+  U(15,66,2,12,K.woodD);U(39,66,2,12,K.woodD);
+  TRI(10,66,36,12,K.red,1.4,K.redL);
+  U(28,92,1,14,K.woodD);flag(29,92,9,6,K.purple);U(32,90,2,2,K.white);
+}
+function dMarket(){
+  U(9,32,2,32,K.wood);U(45,32,2,32,K.wood);
+  U(25,4,5,4,K.woodD);
+  PERSON(ox+27,gy-4,'#4f7c9e',1,0,{hat:K.red});
+  U(8,11,40,11,K.wood);U(8,11,40,1,K.woodL);
+  for(let x=8;x<48;x+=5)U(x,11,1,11,K.woodD);
+  for(let k=0;k<10;k++){const col=k%2?K.white:K.red;U(6+k*4,40,4,8,col);U(7+k*4,32,2,2,col);}
+  [12,17,22].forEach(x=>U(x,15,3,3,K.redL));
+  U(30,14,6,3,'#c9a063');U(38,14,6,3,'#7aa0b8');
+}
+function dPalisade(){
+  for(let k=0;k<13;k++){const x=2+k*4,h=24+((k*5)%4)*2;U(x,h,3,h,K.wood);U(x+2,h,1,h,K.woodD);U(x,h,1,h,K.woodL);U(x+1,h+2,1,2,K.wood);}
+  U(0,9,56,3,K.woodD);U(0,19,56,3,K.woodD);
+}
+function dForge(){
+  U(34,44,7,26,K.stone);U(33,44,9,3,K.stoneD);
+  smoke(36,46,'#b9b3aa');
+  U(7,22,38,22,'#4a3a30');
+  U(11,17,24,17,K.dark);
+  const f=Math.round((Math.sin(T*9)*.5+.5)*2);
+  disc(18,12,9,K.orange,.12);
+  U(14,11,9,7,K.orange);U(16,10+f,5,5,K.glow);
+  U(28,7,9,3,'#38383f');U(30,4,5,4,'#38383f');U(26,10,13,1,'#6d6d78');
+  TRI(3,22,46,8,'#5d4a3c',1,'#4a392d');
+}
+function dRange(){
+  U(4,6,10,6,K.thatch);U(4,6,10,1,K.thatchD);U(4,3,10,1,K.thatchD);
+  U(22,18,3,18,K.woodD);U(33,18,3,18,K.woodD);
+  for(let dy=-9;dy<=9;dy++)for(let dx=-9;dx<=9;dx++){const d=Math.hypot(dx,dy);if(d>9)continue;
+    U(24+dx,26+dy,1,1,d<2?K.gold:d<4?K.red:d<6.5?K.white:d<8?K.red:K.thatchD);}
+  U(25,26,9,1,K.woodL);U(33,26,2,1,K.white);U(21,29,8,1,K.woodL);
+  U(46,50,2,50,K.woodD);U(41,48,12,18,'#d8c49a');
+  for(let i=0;i<10;i++)U(45+Math.round(Math.sin(i/9*Math.PI)*3),44-i+0,1,1,'#4a3322');
+  U(45,44,1,10,K.dark);
+}
+function dFire(){
+  U(6,6,14,4,K.woodD);U(6,6,14,1,K.wood);U(36,6,14,4,K.woodD);U(36,6,14,1,K.wood);
+  disc(28,12,18,'#f2a33c',.06);disc(28,12,11,'#f2a33c',.07);
+  for(let k=0;k<7;k++)U(21+k*3,3,3,3,k%2?K.stone:K.stoneD);
+  U(22,5,12,2,K.woodD);U(24,7,8,2,K.wood);
+  for(let i=0;i<8;i++){const hh=Math.max(1,Math.round((5+Math.sin(T*11+i*1.3)*2)*(1-Math.abs(i-3.5)/5)));
+    U(24+i,7+hh,1,hh,hh>4?K.glow:K.orange);}
+}
+/* úroveň 2 */
+function dKeep(){
+  U(16,52,24,52,K.stone);bricks(16,52,24,52);
+  U(16,52,3,52,K.stoneL);U(37,52,3,52,K.stoneD);
+  U(14,56,28,4,K.stoneL);
+  for(let k=0;k<4;k++)U(14+k*8,62,4,6,K.stoneL);
+  U(27,42,2,8,K.dark);U(27,26,2,8,K.dark);
+  U(24,13,8,13,K.door);U(25,14,6,1,K.door);
+  U(28,78,1,16,K.woodD);flag(29,78,8,5,K.purple);U(31,77,2,2,K.white);
+}
+function dWall(){
+  U(0,30,56,30,K.stone);bricks(0,30,56,30);U(0,30,56,2,K.stoneL);
+  const gx=8+Math.abs(((T*6)%80)-40);
+  PERSON(ox+gx,gy-30,'#7a7f8c',1,T,{hat:'#9aa0ad'});
+  for(let k=0;k<7;k++){U(1+k*8,38,5,8,K.stone);U(1+k*8,38,5,1,K.stoneL);}
+  U(12,20,2,7,K.dark);U(28,20,2,7,K.dark);U(44,20,2,7,K.dark);
+}
+function dGate(){
+  U(3,50,16,50,K.stone);U(37,50,16,50,K.stone);bricks(3,50,16,50);bricks(37,50,16,50);
+  U(3,50,2,50,K.stoneL);U(51,50,2,50,K.stoneD);
+  U(19,38,18,38,K.stone);bricks(19,38,18,38);
+  U(21,24,14,24,K.door);U(22,26,12,2,K.door);U(24,27,8,1,K.door);
+  for(let x=22;x<34;x+=3)U(x,26,1,26,'#6c5a45');
+  U(21,18,14,1,'#6c5a45');U(21,10,14,1,'#6c5a45');
+  U(1,54,20,4,K.stoneL);U(35,54,20,4,K.stoneL);U(19,42,18,4,K.stoneL);
+  for(let k=0;k<4;k++){U(1+k*5,60,4,6,K.stoneL);U(35+k*5,60,4,6,K.stoneL);}
+  for(let k=0;k<3;k++)U(19+k*6,48,3,6,K.stoneL);
+  const g=.6+.4*Math.sin(T*5);c.globalAlpha=g;U(9,38,2,6,K.glow);U(43,38,2,6,K.glow);c.globalAlpha=1;
+  U(26,37,4,9,K.purple);U(27,34,2,2,K.white);
+}
+function dCathedral(){
+  U(6,28,44,28,K.stoneL);bricks(6,28,44,28,K.stone);
+  for(let x=10;x<50;x+=12){U(x,22,3,10,'#6a8fd0');U(x+1,26,1,4,'#e0b050');}
+  TRI(4,28,48,12,K.slate,1.8,K.slateL);
+  U(20,54,16,54,K.stoneL);bricks(20,54,16,54,K.stone);
+  U(20,54,2,54,'#cfd2da');U(34,54,2,54,K.stone);
+  TRI(19,54,18,22,K.slate,.4,K.slateL);
+  disc(28,40,6,'#3b3a6a');disc(28,40,5,'#6a8fd0');U(28,45,1,10,'#3b3a6a');U(23,40,11,1,'#3b3a6a');
+  U(24,16,8,16,K.door);U(25,17,6,1,K.door);
+  U(28,92,1,10,K.gold);U(26,89,5,1,K.gold);
+}
+function dAlchemy(){
+  U(20,64,16,64,'#5b4a7a');
+  for(let y=0;y<64;y+=5)U(20,64-y,16,1,'#46385f');
+  U(20,64,2,64,'#7c68a0');U(34,64,2,64,'#3d3052');
+  U(17,44,22,3,'#46385f');
+  TRI(17,64,22,14,'#3a2d55',.75,'#4d3d70');
+  c.globalAlpha=.6+.4*Math.sin(T*3);U(26,58,4,6,'#7dffb0');U(26,34,4,6,K.purpleL);c.globalAlpha=1;
+  U(26,16,5,8,K.door);
+  const by=82+Math.round(Math.sin(T*2)*2);
+  disc(28,by+2,8,'#8dffc4',.13);disc(28,by+2,3,'#8dffc4');
+  smoke(31,64,'#8dffc4');
+}
+function dBarracks(){
+  U(5,30,46,30,'#8f4f42');
+  for(let y=0;y<30;y+=5){U(5,30-y,46,1,'#6e3a31');for(let x=5+((y/5)%2)*4;x<51;x+=8)U(x,30-y,1,5,'#6e3a31');}
+  TRI(2,30,52,9,K.slate,1,K.slateL);
+  [12,42].forEach(x=>{U(x,22,6,7,K.red);U(x+2,22,1,7,K.white);U(x,22,6,1,K.white);});
+  U(24,16,8,16,K.door);
+  for(let k=0;k<4;k++){U(36+k*3,24,1,24,K.woodL);U(36+k*3,27,1,3,'#cfd3da');}
+  U(35,10,10,1,K.woodD);
+  U(28,54,1,15,K.woodD);flag(29,54,8,5,K.red);
+}
+function dMill(){
+  for(let i=0;i<38;i++){const w=26-Math.round(i*.2),dx=28-Math.floor(w/2);
+    U(dx,i+1,w,1,i%6===5?'#c9c2b0':'#e4dccb');U(dx+w-4,i+1,4,1,'#c4bba7');}
+  TRI(16,38,24,9,K.wood,1.2,K.woodD);
+  U(25,10,6,10,K.door);U(26,26,4,5,K.glow);
+  const ang=T*.9;
+  for(let b=0;b<4;b++){const a=ang+b*Math.PI/2,ca=Math.cos(a),sa=Math.sin(a);
+    for(let r=3;r<=24;r++){const x=28+ca*r,y=44+sa*r;
+      if(r>7)for(let o=1;o<=3;o++)U(x-sa*o,y+ca*o,1,1,'#e9e1c8');
+      U(x,y,1,1,K.woodD);}}
+  U(27,46,3,3,K.woodD);
+}
+function dHall(){
+  U(2,9,52,9,K.stoneD);U(2,9,52,1,K.stone);
+  U(4,30,48,21,K.wood);
+  for(let x=4;x<52;x+=4)U(x,30,1,21,K.woodD);
+  U(4,30,3,21,K.woodD);U(49,30,3,21,K.woodD);
+  TRI(0,30,56,20,K.thatch,1.4,K.thatchD);
+  U(4,29,48,2,'rgba(0,0,0,.3)');
+  U(22,19,12,19,K.door);
+  for(let x=23;x<33;x+=2)U(x,17,1,17,'#3b2a20');
+  [[24,27],[25,28],[26,29],[32,27],[31,28],[30,29]].forEach(p=>U(p[0],p[1],1,1,'#d9cdb0'));
+  [17,38].forEach(x=>{const f=Math.round((Math.sin(T*8+x)*.5+.5)*2);disc(x+1,24,6,K.glow,.12);U(x,16,2,6,K.woodD);U(x-1,22+f,4,3,K.orange);U(x,22+f,2,2,K.glow);});
+  U(28,74,1,22,K.woodD);U(23,68,10,1,K.woodD);
+  U(24,67,8,15,K.purple);
+  for(let y=0;y<15;y++)if((y>>1)%2===0)U(24,67-y,8,1,'#2a1b45');
+  U(27,62,2,3,K.white);
+}
+
+/* pozemek bez stavby */
+function marker(i,a){
+  ox=PAD+i*PW;gy=GY;
+  U(10,10,2,10,K.wood);U(44,10,2,10,K.wood);U(10,10,2,2,K.woodL);U(44,10,2,2,K.woodL);
+  if(a>0){const bob=Math.round(Math.sin(T*3+i)*2);
+    disc(28,25+bob,9,K.gold,.16);
+    U(26,27+bob,4,1,K.gold);U(25,26+bob,6,4,K.gold);U(26,22+bob,4,1,K.gold);U(26,26+bob,1,2,'#fff2b0');}
+  else{c.globalAlpha=.5;for(let x=0;x<8;x++)U(14+x*4,3,2,1,K.parch);c.globalAlpha=1;}
+}
+function bracket(i){
+  const x0=PAD+i*PW;c.fillStyle=K.gold;
+  for(let x=0;x<PW-4;x+=4)c.fillRect(x0+2+x,GY+3,2,2);
+  const b=Math.round(Math.sin(T*4)*1.5);
+  for(let r=0;r<3;r++)c.fillRect(x0+26+r,8+r+b,7-2*r,1);
+}
+function dust(p){c.globalAlpha=.7*(1-p);for(let k=0;k<7;k++)U(28+(k-3)*(4+p*14),2+((k*5)%4)+p*(3+k%3),3,3,'#d8c7a5');c.globalAlpha=1;}
+
+/* pozadí (vrstvy se kreslí jednou) */
+const BGS={};
+function layer(W){const e=document.createElement('canvas');e.width=W;e.height=H;const x=e.getContext('2d');x.imageSmoothingEnabled=false;return{e:e,x:x};}
+function rng(seed){let s=seed>>>0;return()=>(s=(s*1664525+1013904223)>>>0)/4294967296;}
+function ridge(g,W,col,base,a1,f1,a2,f2,ph){g.fillStyle=col;for(let x=0;x<W;x+=2){const h=Math.round(base+Math.sin(x*f1+ph)*a1+Math.sin(x*f2+ph*2)*a2);g.fillRect(x,GY-h,2,h);}}
+function getBG(lv){
+  if(BGS[lv])return BGS[lv];
+  const W=sceneW(lv),pal=PAL[lv],sk=layer(W),bk=layer(W),fr=layer(W),r=rng(7+lv*13);
+  let g=sk.x;
+  const bh=Math.ceil(EB/pal.sky.length);
+  pal.sky.forEach((col,i)=>{g.fillStyle=col;g.fillRect(0,i*bh,W,bh+1);
+    if(i){g.fillStyle=pal.sky[i-1];for(let row=0;row<2;row++)for(let x=row*2;x<W;x+=4)g.fillRect(x,i*bh+row*2,2,2);}});
+  if(lv===0){[22,15,9].forEach((rr,i)=>{g.globalAlpha=[.18,.25,.5][i];g.fillStyle='#f4ecd8';g.beginPath();g.arc(Math.round(W*.66),52,rr,0,7);g.fill();});g.globalAlpha=1;}
+  else{g.fillStyle='#ffe3a0';g.beginPath();g.arc(Math.round(W*.3),GY-4,16,0,7);g.fill();g.globalAlpha=.25;g.beginPath();g.arc(Math.round(W*.3),GY-4,24,0,7);g.fill();g.globalAlpha=1;}
+  g=bk.x;
+  ridge(g,W,pal.hillFar,26,8,.02,4,.05,0);
+  ridge(g,W,pal.hillNear,14,6,.035,2,.09,1);
+  g.fillStyle=pal.tree;
+  for(let x=8;x<W;x+=14+Math.floor(r()*14)){const h=Math.round(14+Math.sin(x*.035+1)*6+Math.sin(x*.09+2)*2),by=GY-h+2;
+    g.fillRect(x,by-3,1,3);g.fillRect(x-3,by-6,7,3);g.fillRect(x-2,by-9,5,3);g.fillRect(x-1,by-12,3,3);}
+  g.fillStyle=pal.wall;g.fillRect(0,GY-9,W,9);
+  g.fillStyle=pal.wallHi;g.fillRect(0,GY-9,W,1);
+  g.fillStyle='rgba(0,0,0,.2)';g.fillRect(0,GY-5,W,1);
+  for(let x=0;x<W;x+=6){g.fillRect(x,GY-8,1,3);g.fillRect(x+3,GY-4,1,4);}
+  for(let i=0;i<=LEVELS[lv].plots;i++){const x=PAD+i*PW-1;
+    g.fillStyle='#3a2d24';g.fillRect(x,GY-18,2,9);
+    g.fillStyle='rgba(242,193,78,.18)';g.fillRect(x-3,GY-25,8,9);
+    g.fillStyle=K.glow;g.fillRect(x-1,GY-22,4,4);}
+  g=fr.x;
+  g.fillStyle=pal.earth;g.fillRect(0,GY,W,EB-GY);
+  g.fillStyle='#8a5e30';g.fillRect(0,GY,W,2);
+  for(let x=0;x<W;x+=2){const h=r()<.5?1:(r()<.5?2:0);if(h){g.fillStyle=r()<.5?'#c9a64b':'#a88b3a';g.fillRect(x,GY-h,1,h);}}
+  for(let y=GY+4;y<EB;y+=4){g.fillStyle='rgba(0,0,0,.28)';g.fillRect(0,y,W,1);const off=((y-GY)/4%2)*6;for(let x=off;x<W;x+=12)g.fillRect(x,y-4,1,4);}
+  for(let k=0;k<W/5;k++){const x=Math.floor(r()*W),y=GY+3+Math.floor(r()*(EB-GY-5));g.fillStyle=r()<.5?'rgba(255,220,160,.12)':'rgba(0,0,0,.14)';g.fillRect(x,y,3+Math.floor(r()*3),2);}
+  g.fillStyle='#2d1b0e';g.fillRect(0,EB-2,W,2);
+  return BGS[lv]={sky:sk.e,back:bk.e,front:fr.e};
+}
+const CLOUDS=[{x:20,y:22,w:34,s:3},{x:150,y:40,w:48,s:2},{x:300,y:18,w:40,s:4},{x:430,y:48,w:30,s:2.5},{x:560,y:28,w:52,s:3.5},{x:690,y:44,w:36,s:2}];
+function cloud(x,y,w,col,sh){x=Math.round(x);y=Math.round(y);c.fillStyle=col;
+  c.fillRect(x,y,w,5);c.fillRect(x+3,y-3,Math.round(w*.4),4);c.fillRect(x+Math.round(w*.38),y-6,Math.round(w*.34),7);c.fillRect(x+Math.round(w*.7),y-2,Math.round(w*.25),4);
+  c.fillStyle=sh;c.fillRect(x,y+4,w,2);}
+function water(W,pal){
+  c.fillStyle=pal.water;c.fillRect(0,EB,W,H-EB);
+  c.save();c.beginPath();c.rect(0,EB,W,H-EB);c.clip();c.globalAlpha=.32;c.translate(0,EB*2);c.scale(1,-1);c.drawImage(canvasEl,0,0,W,EB,0,0,W,EB);c.restore();
+  c.fillStyle=pal.rip;c.globalAlpha=.3;
+  for(let k=0;k<7;k++)c.fillRect(Math.round((((k*97+T*(k%2?9:-7))%W)+W)%W),EB+3+(k%3)*5,10,1);
+  c.globalAlpha=1;c.fillStyle='rgba(0,0,0,.25)';c.fillRect(0,H-3,W,3);
+}
+
+/* lidé */
+const PCOL=['#4f7c9e','#9e4f4f','#6a8f4a','#b0843a','#7a5aa0','#4a8f8f'];
+let walkers=[];
+function seedWalkers(){const lv=S.level,W=sceneW(lv),n=Math.min(7,1+Math.floor(filled(lv)/1.5));walkers=[];
+  for(let i=0;i<n;i++)walkers.push({x:PAD+20+((i*149)%(W-PAD*2-40)),dir:i%2?1:-1,sp:6+(i*5)%7,col:PCOL[i%PCOL.length],hat:i%3===1?'#8a5a2a':null,pause:0});}
+function stepWalkers(dt){const W=sceneW(S.level);
+  walkers.forEach(w=>{if(w.pause>0){w.pause-=dt;return;}
+    w.x+=w.dir*w.sp*dt;
+    if(w.x<PAD-8){w.x=PAD-8;w.dir=1;w.pause=1+Math.random()*2;}
+    else if(w.x>W-PAD+8){w.x=W-PAD+8;w.dir=-1;w.pause=1+Math.random()*2;}
+    else if(Math.random()<.003)w.pause=1+Math.random()*2;});}
+
+/* hlavní kreslení scény */
+const ANIM={};
+function drawScene(now){
+  if(!ctx)return;
+  const lv=S.level,L=LEVELS[lv],W=sceneW(lv),bg=getBG(lv),pal=PAL[lv];
+  c=ctx;c.imageSmoothingEnabled=false;T=now;
+  c.clearRect(0,0,W,H);
+  c.drawImage(bg.sky,0,0);
+  CLOUDS.forEach(cl=>cloud(((cl.x+T*cl.s)%(W+120))-60,cl.y,cl.w,pal.cloud,pal.cloudSh));
+  c.drawImage(bg.back,0,0);
+  const a=avail();
+  for(let i=0;i<L.plots;i++){
+    ox=PAD+i*PW;gy=GY;
+    const id=S.plots[lv][i];
+    if(id){
+      const key=lv+':'+i,st=ANIM[key];
+      if(st){
+        const p=Math.min(1,(performance.now()-st)/700);
+        if(p>=1){delete ANIM[key];BLD[id].draw();}
+        else{const e=1-Math.pow(1-p,3);c.save();c.beginPath();c.rect(ox-4,0,PW+8,GY);c.clip();gy=GY+Math.round((1-e)*70);BLD[id].draw();c.restore();gy=GY;dust(p);}
+      }else BLD[id].draw();
+    }else marker(i,a);
+  }
+  ox=0;gy=GY;
+  PERSON(12,GY+1,'#7a4cb8',1,0,{cape:true,crown:true,hair:'#d8b04a'});
+  walkers.forEach(w=>PERSON(w.x,GY+1,w.col,w.dir,w.pause>0?0:T,{hat:w.hat}));
+  c.drawImage(bg.front,0,0);
+  if(ui.sel!=null)bracket(ui.sel);
+  water(W,pal);
+}
+const T0=performance.now();let last=0;
+function frame(now){
+  if(!document.hidden&&now-last>=33){const dt=Math.min(.1,(now-last)/1000);last=now;stepWalkers(dt);drawScene((now-T0)/1000);}
+  requestAnimationFrame(frame);
+}
+function redraw(){drawScene(reduce?1.3:(performance.now()-T0)/1000);}
+
+/* náhled stavby v nabídce */
+function preview(id,cv){
+  const x=cv.getContext('2d');x.imageSmoothingEnabled=false;
+  c=x;ox=0;gy=96;T=1.3;
+  const pal=PAL[S.level];
+  x.fillStyle=pal.sky[3];x.fillRect(0,0,56,104);
+  x.fillStyle=pal.sky[4];x.fillRect(0,60,56,44);
+  BLD[id].draw();
+  x.fillStyle=pal.earth;x.fillRect(0,96,56,8);x.fillStyle='#8a5e30';x.fillRect(0,96,56,2);x.fillStyle='#2d1b0e';x.fillRect(0,102,56,2);
+}
+
+/* ---------- scéna, záložky, panel ---------- */
+const stageEl=$('stage'),plotsEl=$('plots'),panelEl=$('panel'),tabsEl=$('tabs');
+function setupScene(){
+  const lv=S.level,L=LEVELS[lv],W=sceneW(lv);
+  canvasEl.width=W;canvasEl.height=H;canvasEl.style.width=W*SC+'px';canvasEl.style.height=H*SC+'px';
+  ctx=canvasEl.getContext('2d');
+  plotsEl.innerHTML='';
+  for(let i=0;i<L.plots;i++){
+    const b=document.createElement('button');b.type='button';b.className='plot';
+    b.style.left=(PAD+i*PW)*SC+'px';b.style.width=PW*SC+'px';
+    b.addEventListener('click',()=>selectPlot(i));
+    plotsEl.appendChild(b);
+  }
+  seedWalkers();
+}
+function focusPlot(i){
+  const left=(PAD+i*PW)*SC-stageEl.clientWidth/2+PW*SC/2;
+  stageEl.scrollTo({left:Math.max(0,left),behavior:reduce?'auto':'smooth'});
+}
+function setLevel(lv){
+  if(lv>S.unlocked)return;
+  S.level=lv;ui.sel=null;save();setupScene();renderAll();
+  const idx=S.plots[lv].indexOf(null);focusPlot(idx>=0?idx:0);
+}
+function selectPlot(i){ui.sel=ui.sel===i?null:i;renderAll();}
+function build(id){
+  const lv=S.level,i=ui.sel;
+  if(i==null||S.plots[lv][i]||avail()<=0)return;
+  S.plots[lv][i]=id;S.spent++;save();
+  if(!reduce)ANIM[lv+':'+i]=performance.now();
+  seedWalkers();renderAll();
+}
+function renderStats(){
+  $('nPieces').textContent=avail();$('nWon').textContent=S.won;
+  $('stPieces').classList.toggle('has',avail()>0);
+}
+function renderTabs(){
+  tabsEl.innerHTML='';
+  LEVELS.forEach((L,lv)=>{
+    const b=document.createElement('button');b.type='button';b.className='tab';b.setAttribute('role','tab');
+    b.setAttribute('aria-selected',String(lv===S.level));
+    const locked=lv>S.unlocked;
+    b.disabled=locked;
+    b.innerHTML=L.name+'<small>'+(locked?'zamčeno':filled(lv)+'/'+L.plots)+'</small>';
+    b.addEventListener('click',()=>setLevel(lv));
+    tabsEl.appendChild(b);
+  });
+  const L=LEVELS[S.level];$('prog').textContent='Postaveno '+filled(S.level)+' z '+L.plots;
+}
+function renderPlotLabels(){
+  const lv=S.level;
+  [].forEach.call(plotsEl.children,(b,i)=>{
+    const id=S.plots[lv][i];
+    b.setAttribute('aria-label','Pozemek '+(i+1)+': '+(id?BLD[id].n:'prázdný'));
+    b.setAttribute('aria-pressed',String(ui.sel===i));
+  });
+}
+function renderPanel(){
+  const lv=S.level,L=LEVELS[lv],full=filled(lv)===L.plots,a=avail();
+  let h='';
+  if(full){
+    if(lv<LEVELS.length-1){
+      if(S.unlocked<lv+1)h+='<div class="up"><div><b>'+L.name+' je hotová.</b><p class="lead">Všechny pozemky jsou postavené. Čeká na tebe další úroveň.</p></div><button class="btn" id="upBtn" type="button">Povýšit na: '+LEVELS[lv+1].name+'</button></div>';
+      else h+='<p class="lead">'+L.name+' je dokončená. Pokračuj na další úrovni.</p>';
+    }else h+='<div class="up"><div><b>Království je dokončeno.</b><p class="lead">Další úroveň je v přípravě. Slova můžeš hádat dál.</p></div></div>';
+  }
+  const sel=ui.sel,id=sel!=null?S.plots[lv][sel]:null;
+  if(sel!=null&&id){
+    h+='<div class="info"><b>'+BLD[id].n+'</b><p class="lead">'+BLD[id].d+'</p></div>';
+  }else if(sel!=null&&a>0){
+    h+='<div><b>Co tu postavit?</b> <span class="lead">Stavba stojí jeden dílek. Máš jich '+a+'.</span></div><div class="picks" id="picks">';
+    L.list.forEach(k=>{h+='<button class="pick" type="button" data-id="'+k+'"><canvas width="56" height="104"></canvas><span>'+BLD[k].n+'</span></button>';});
+    h+='</div>';
+  }else if(sel!=null){
+    h+='<p>Na tenhle pozemek zatím nemáš dílek. Uhodni slovo a postavíš tu, co chceš.</p>';
+  }else if(!full||a>0){
+    if(a>0)h+='<p>Máš <b>'+a+'</b> '+(a===1?'dílek':a<5?'dílky':'dílků')+'. Klepni na prázdný pozemek ve scéně a vyber, co na něm vyroste.</p>';
+    else if(S.won===0)h+='<p>Vítej v království. Zatím tu hoří jen táborák. Uhodni slovo dne a postavíš první dílek.</p>';
+    else h+='<p class="lead">Žádný volný dílek. Další získáš za uhodnuté slovo.</p>';
+  }
+  panelEl.innerHTML=h;
+  const up=$('upBtn');if(up)up.addEventListener('click',()=>{S.unlocked=Math.max(S.unlocked,lv+1);save();setLevel(lv+1);});
+  [].forEach.call(panelEl.querySelectorAll('.pick'),b=>{preview(b.dataset.id,b.firstChild);b.addEventListener('click',()=>build(b.dataset.id));});
+}
+function renderAll(){renderStats();renderTabs();renderPlotLabels();renderPanel();redraw();}
+
+/* ---------- hádání slov: blízkost významu ---------- */
+const GR={
+vl:"král královna princ princezna kníže trůn koruna žezlo císař šlechtic dvořan vévoda panovník dvůr rada poddaný vladař",
+bj:"válka bitva rytíř voják meč štít kopí luk šíp kuše helma brnění armáda obléhání vítězství nepřítel hrdina zbraň turnaj dýka kopiník žoldák zbroj",
+hr:"hrad zámek věž brána hradba příkop most město vesnice chata mlýn studna tvrz sklep komín schody dveře okno střecha zeď dům kostel náměstí hospoda palisáda věznice",
+kv:"kovář kovárna železo zlato stříbro měď bronz olovo kladivo kovadlina mince řetěz hřebík podkova uhlí ocel",
+ze:"pole obilí mouka pluh sedlák žně sláma seno stodola vidle záhon louka chmel úroda jarmark pastvina",
+zv:"kůň kráva prase ovce kozel pes kočka vlk medvěd liška jelen zajíc včela ryba štika had myš drak býk",
+pt:"sokol orel havran vrána holub kohout kachna sova labuť husa pták",
+vo:"řeka potok jezero moře loď rybník voda led kotva rybář",
+pr:"strom dub les lípa květ růže tráva kámen skála hora údolí cesta jeskyně bylina houba",
+jd:"pivo víno chléb maso sýr mléko jablko koláč med hostina polévka hrnec džbán talíř pohár kotel pekař",
+hu:"harfa píseň tanec hudba bubny loutna trubka flétna bard",
+ci:"láska smích strach radost smutek vztek naděje odvaha čest věrnost sláva pýcha zrada",
+pc:"bouře blesk déšť sníh mráz vítr mrak slunce měsíc hvězda mlha oheň úsvit noc",
+kn:"kniha svitek pergamen pero písmo pečeť mapa báseň bajka zákon soud",
+ob:"obchod kupec trh zboží peníze daň cena dárek poklad",
+cl:"mlynář lovec tesař sluha mnich farář šašek žebrák zloděj lupič pirát kat vězeň stráž léčitel řemeslník",
+rd:"matka otec dcera syn bratr sestra dědeček babička rodina dítě",
+mg:"čaroděj kouzlo víla trpaslík skřet obr duch anděl čert pohádka hrob hůl kletba prsten kouzelník",
+cs:"ráno večer zima léto jaro podzim rok den",
+tl:"hlava oko ucho nos ruka noha kost krev tvář vlasy zub prst záda břicho",
+dm:"stůl židle postel lampa okno hrnek nůž lžíce vidlička koberec skříň zrcadlo košile kabát boty čepice šaty deka polštář",
+dp:"auto vlak letadlo kolo autobus silnice motor semafor nádraží lokomotiva metro",
+tc:"počítač telefon internet televize robot rádio baterie kabel elektřina stroj fotoaparát klávesnice myš obrazovka",
+sp:"fotbal hokej tenis míč branka plavání běh šachy karty kostky hra závod medaile tým",
+sk:"škola učitel žák věda matematika číslo písmeno slovo jazyk dějepis zeměpis hodina vysvědčení tabule",
+zd:"nemoc lék doktor nemocnice zdraví bolest horečka léčba",
+br:"červená modrá zelená žlutá bílá černá barva fialová",
+ab:"svoboda spravedlnost pravda moudrost osud svědomí tajemství touha vina pokora moc dědictví stín paměť čas nekonečno smysl hranice rovnováha",
+gz:"Praha Brno Ostrava Evropa svět země ostrov kontinent pláž poušť pustina"};
+const SECRET="král královna princ princezna kníže trůn koruna žezlo rytíř meč štít kopí luk šíp helma brnění hrad věž brána hradba příkop most mlýn studna kovář kovárna zlato železo mince pole obilí chléb pivo víno hostina kůň vlk medvěd drak sokol orel řeka les hora strom oheň bouře kniha svitek pečeť zákon trh kupec poklad zloděj mnich šašek čaroděj kouzlo víla trpaslík harfa píseň tanec láska odvaha čest zrada".split(' ');
+const TG=Object.keys(GR),NT=TG.length;
+const TN={vl:'královský dvůr',bj:'bojiště',hr:'hradby',kv:'kovárna',ze:'pole a role',zv:'zvěřinec',pt:'ptačí hnízdo',vo:'vody',pr:'divočina',jd:'hodovní stůl',hu:'muzikanti',ci:'srdce',pc:'nebe',kn:'knihovna',ob:'trh',cl:'prostý lid',rd:'rodina',mg:'čáry a kouzla',cs:'kalendář',tl:'tělo',dm:'domácnost',dp:'cesty a vozy',tc:'dílna strojů',sp:'hřiště',sk:'škola',zd:'ošetřovna',br:'barvy',ab:'myšlenky',gz:'dalekém kraji'};
+const AFF={};"vl-bj vl-hr vl-ob vl-ci bj-kv hr-kv hr-ze kv-ob ze-jd ze-zv zv-pt zv-pr zv-bj vo-pc pc-pr vo-pr mg-kn mg-ci mg-pc hu-ci hu-jd rd-ci cl-ob cl-kv jd-ob cs-pc pr-ze kn-vl kn-ob cl-vl cl-bj tl-zd tl-ci sk-kn sk-ab dp-tc dp-vo sp-bj sp-ci dm-jd dm-hr br-pr br-pc ab-ci ab-mg ab-vl ab-kn zd-cl gz-pr gz-dp gz-ob".split(' ').forEach(p=>{const q=p.split('-');AFF[q[0]+q[1]]=AFF[q[1]+q[0]]=.45;});
+const V=[],VI={};
+TG.forEach((t,ti)=>GR[t].split(' ').forEach(w=>{const k=strip(w);let o=VI[k];if(!o){o=VI[k]={w:w,k:k,v:Array(NT).fill(0),n:0};V.push(o);}if(!o.v[ti]){o.v[ti]=o.n?1:2;o.n++;}}));
+V.forEach(o=>{o.m=o.v.map((x,i)=>x+TG.reduce((s,t,j)=>s+(AFF[TG[i]+t]||0)*o.v[j],0));o.nr=Math.sqrt(o.v.reduce((s,x,i)=>s+x*o.m[i],0));});
+const sim=(a,b)=>a.v.reduce((s,x,i)=>s+x*b.m[i],0)/(a.nr*b.nr);
+const hj=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%997;return h/997;};
+const SEC=SECRET.map(strip).filter(k=>VI[k]);
+const ROY='svoboda spravedlnost pravda moudrost osud svědomí tajemství stín paměť dědictví rovnováha smysl pokora'.split(' ').map(strip).filter(k=>VI[k]);
+const wordIndexFor=dn=>((dn*MULT)%SEC.length+SEC.length)%SEC.length;
+function rankFor(k){const s=VI[k],r={};V.map(o=>({o:o,s:o===s?9:sim(o,s)+hj(o.k+k)*.004})).sort((a,b)=>b.s-a.s).forEach((x,i)=>{r[x.o.k]=i+1;});return r;}
+const ST=[[3,'Plameny nad hradem','#ffcf3a','Skoro! Už slyšíš zvonit zvony.'],[8,'Hoří hradby','#ff8a1f','Hoří! Jsi na stopě.'],[20,'Kovárna žhne','#f0601e','Přihořívá. Železo je žhavé, ale ještě ne to pravé.'],[50,'Táborák','#d0503a','Plápolá oheň, jen jiskra ještě nepřeskočila.'],[110,'Dým z komína','#a8745e','Vlažno. Někde se topí, ale daleko.'],[200,'Studna','#5b86b8','Chladno. Tady najdeš jen vodu.'],[1e9,'Ledová brána','#4a62a8','Mráz. Tohle království je úplně jinde.']];
+const heat=r=>ST.find(x=>r<=x[0]);
+const pctOf=r=>Math.max(3,Math.round(100*(1-Math.log(r)/Math.log(V.length))));
+function shared(a,s){let b=-1,bv=0;for(let i=0;i<NT;i++){const x=a.v[i]*s.v[i];if(x>bv){bv=x;b=i;}}return b<0?null:TN[TG[b]];}
+const msgEl=$('msg'),resultEl=$('result'),gi=$('gi');
+let cur=null,msgT=0;
+function todayInfo(){const d=new Date();
+  return{key:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),dn:Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5),d:d};}
+function setMsg(t,ms){msgEl.textContent=t;clearTimeout(msgT);if(ms)msgT=setTimeout(()=>{msgEl.textContent='';},ms);}
+function begin(){setMsg('');renderModes();renderGuesses();showResult();}
+function startDaily(){
+  const t=todayInfo();
+  if(!S.day||S.day.key!==t.key||!S.day.n){S.day={key:t.key,n:1,g:[],done:false,won:false};save();}
+  const k=SEC[wordIndexFor(t.dn)];
+  cur={mode:'daily',word:k,full:VI[k].w,st:S.day,rk:rankFor(k)};
+  $('gTitle').textContent='Slovo dne';
+  $('gDate').textContent=t.d.toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'long'});
+  begin();
+}
+function startBonus(resume){
+  if(!resume||!S.bonus||!S.bonus.n){
+    const di=wordIndexFor(todayInfo().dn);let i;
+    do{i=Math.floor(Math.random()*SEC.length);}while(i===di||(S.bonus&&S.bonus.i===i));
+    S.bonus={i:i,n:1,g:[],done:false,won:false};save();
+  }
+  const k=SEC[S.bonus.i];
+  cur={mode:'bonus',word:k,full:VI[k].w,st:S.bonus,rk:rankFor(k)};
+  $('gTitle').textContent='Extra slovo';
+  $('gDate').textContent='Bonus navíc, slovo dne už máš za sebou';
+  begin();
+}
+function startRoyal(){
+  const w=Math.floor((todayInfo().dn+3)/7);
+  if(!S.royal||S.royal.wk!==w){S.royal={wk:w,g:[],done:false,won:false};save();}
+  const k=ROY[(w*7)%ROY.length];
+  cur={mode:'royal',word:k,full:VI[k].w,st:S.royal,rk:rankFor(k)};
+  $('gTitle').textContent='Královské slovo';
+  $('gDate').textContent='Jen jedno za týden, platí do neděle. Odměna: 3 dílky';
+  begin();
+}
+function renderModes(){const el=$('modes');el.innerHTML='';
+  [['daily','Slovo dne',startDaily],['royal','♛ Královské slovo',startRoyal]].forEach(m=>{const b=document.createElement('button');b.type='button';b.className='tab';
+    b.setAttribute('aria-selected',String(cur.mode===m[0]||(m[0]==='daily'&&cur.mode==='bonus')));b.textContent=m[1];b.addEventListener('click',()=>m[2]());el.appendChild(b);});}
+function renderGuesses(){
+  const g=cur.st.g,s=VI[cur.word],X=cur.st.x||{};
+  $('guesses').innerHTML=g.map((k,i)=>({k:k,i:i,r:cur.rk[k]||(X[k]&&X[k].r)||V.length})).sort((a,b)=>a.r-b.r).map(x=>{
+    const o=VI[x.k]||{w:esc((X[x.k]||{}).w||x.k)},h=heat(x.r),sh=x.r===1||!VI[x.k]?null:shared(o,s),ai=(X[x.k]||{}).h;
+    return '<div class="gs'+(x.i===g.length-1?' last':'')+'" style="--hc:'+(x.r===1?'#ffd34d':h[2])+'"><div class="gw"><b>'+o.w+'</b><span>'+(x.r===1?'Trůn je tvůj!':h[1])+'</span></div><div class="gb"><i style="width:'+(x.r===1?100:pctOf(x.r))+'%"></i></div><p>'+(x.r===1?'Tohle je hledané slovo.':(cur.mode==='royal'?'':h[3]+(sh?' Společné: '+sh+'.':'')+(ai?' '+esc(ai):'')))+'</p></div>';
+  }).join('');
+}
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let busyAI=false;
+async function askAI(C,w){
+  const P='Hra na hádání slov. Tajné slovo: "'+C.full+'". Hráčův tip: "'+w.slice(0,40)+'". Odpověz POUZE JSON bez dalšího textu: {"real":true nebo false (je tip skutečné české slovo, i ohnuté),"score":0-100 (sémantická blízkost k tajnému slovu; 100 jen pro totéž slovo, běžná slova bez vztahu 0-15),"hint":"nejvýše 8 českých slov, středověká nápověda, která tajné slovo neprozradí"}';
+  let t=null;
+  if(window.fbAsk){try{t=await window.fbAsk(P);}catch(err){console.warn('Firebase AI:',err);}}
+  if(t==null){
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:P}]})});
+      const d=await res.json();t=d.content.map(i=>i.text||'').join('');
+    }catch(err){return null;}
+  }
+  try{
+    const o=JSON.parse(String(t).replace(/```json|```/g,'').trim());
+    return{real:!!o.real,rank:Math.max(2,Math.round(Math.pow(1-Math.min(99,+o.score||0)/100,1.8)*V.length)),hint:String(o.hint||'').slice(0,80)};
+  }catch(err){return null;}
+}
+async function submit(e){
+  if(e)e.preventDefault();
+  const C=cur;
+  if(C.st.done||busyAI)return;
+  const raw=gi.value.trim(),k=strip(raw).replace(/\s+/g,'');
+  if(!k)return;
+  if(C.st.g.indexOf(k)>=0){setMsg('Tohle už jsi zkoušel.',1800);return;}
+  if(!VI[k]){
+    busyAI=true;setMsg('Královský písař listuje slovníkem…');
+    const r=await askAI(C,raw);busyAI=false;
+    if(cur!==C)return;
+    if(!r){setMsg('Tohle slovo neznám a písař neodpovídá. Zkontroluj ve Firebase konzoli App Check a otevři konzoli prohlížeče (F12), je tam důvod.',5000);return;}
+    if(!r.real){setMsg('Tohle není české slovo.',2400);return;}
+    C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
+  }
+  C.st.g.push(k);gi.value='';setMsg('');
+  if(k===C.word){C.st.done=true;C.st.won=true;S.won++;if(C.mode==='daily')S.daily=(S.daily||0)+1;if(C.mode==='royal')S.spent-=2;}
+  save();renderGuesses();renderAll();showResult();
+}
+function showResult(){
+  const st=cur.st,n=st.g.length;let h='';
+  if(!st.done){
+    if(n>=8){resultEl.innerHTML='<p class="cd">Nedaří se? <button class="btn ghost" id="gu" type="button">Vzdát se a odhalit slovo</button></p>';resultEl.hidden=false;
+      $('gu').addEventListener('click',()=>{st.done=true;st.won=false;save();renderGuesses();showResult();});}
+    else{resultEl.hidden=true;resultEl.innerHTML='';}
+    return;
+  }
+  if(st.won)h+='<p class="rt">'+(n<=3?'Skvěle!':n<=8?'Výborně!':'Uhodnuto!')+'</p><p>Slovo <b class="answer">'+cur.full.toUpperCase()+'</b> máš na '+n+'. pokus. '+(cur.mode==='royal'?'Královské slovo! Dostáváš 3 dílky království.':'Přibyl ti jeden dílek království.')+'</p>';
+  else h+='<p class="rt">Tentokrát ne.</p><p>Hledané slovo: <b class="answer">'+cur.full.toUpperCase()+'</b></p>';
+  h+='<div class="acts">';
+  if(avail()>0)h+='<button class="btn" id="goBuild" type="button">Stavět</button>';
+  if(EXTRA_WORDS)h+='<button class="btn ghost" id="goExtra" type="button">'+(cur.mode==='daily'?'Extra slovo':'Další extra slovo')+'</button>';
+  h+='</div><p class="cd">Nové slovo dne za <b id="cd"></b></p>';
+  resultEl.innerHTML=h;resultEl.hidden=false;
+  const gb=$('goBuild');if(gb)gb.addEventListener('click',goBuild);
+  const ge=$('goExtra');if(ge)ge.addEventListener('click',()=>{startBonus(false);});
+  tick();
+}
+function goBuild(){
+  let lv=S.level;
+  if(S.plots[lv].indexOf(null)<0&&S.unlocked!==lv)lv=S.unlocked;
+  if(lv!==S.level){S.level=lv;save();setupScene();}
+  const idx=S.plots[lv].indexOf(null);
+  ui.sel=idx>=0?idx:null;renderAll();
+  if(idx>=0)focusPlot(idx);
+  stageEl.scrollIntoView({behavior:reduce?'auto':'smooth',block:'start'});
+}
+function tick(){
+  const t=todayInfo();
+  if(S.day&&S.day.key!==t.key){startDaily();renderAll();return;}
+  const n=new Date(),mid=new Date(n.getFullYear(),n.getMonth(),n.getDate()+1);
+  const s=Math.max(0,Math.floor((mid-n)/1000)),el=$('cd');
+  if(el)el.textContent=[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');
+}
+
+$('gf').addEventListener('submit',submit);
+
+/* ---------- start ---------- */
+startDaily();
+if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
+setupScene();
+renderAll();
+{const idx=S.plots[S.level].indexOf(null);focusPlot(idx>=0?idx:0);}
+setInterval(tick,1000);
+if(!reduce)requestAnimationFrame(frame);
+})();
+</script>
+
+<script type="module">
+/* Hodnocení neznámých slov přes Gemini (Firebase AI Logic). Když se nenačte, hra zkusí AI v náhledu Claude. */
+try{
+  const V='12.0.0',B='https://www.gstatic.com/firebasejs/'+V+'/';
+  const {initializeApp}=await import(B+'firebase-app.js');
+  const {getAI,getGenerativeModel,GoogleAIBackend}=await import(B+'firebase-ai.js');
+  const app=initializeApp({
+    apiKey:"AIzaSyCGhP46ocFfvzGCd32Ll1niMnnAfUtvFas",
+    authDomain:"prihoriva-efd4b.firebaseapp.com",
+    projectId:"prihoriva-efd4b",
+    storageBucket:"prihoriva-efd4b.firebasestorage.app",
+    messagingSenderId:"413826357424",
+    appId:"1:413826357424:web:a28f55d792ef13c3c3c375"
+  });
+  const ai=getAI(app,{backend:new GoogleAIBackend()});
+  const model=getGenerativeModel(ai,{model:"gemini-3.8-flash",generationConfig:{responseMimeType:"application/json"}});
+  window.fbAsk=async p=>{const r=await model.generateContent(p);return r.response.text();};
+}catch(e){console.warn('Firebase AI se nenačetla:',e);}
+</script>
+</body></html>
