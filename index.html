@@ -932,13 +932,14 @@ async function submit(e){
   if(e)e.preventDefault();
   const C=cur;
   if(C.st.done||busyAI)return;
+  let aiFail=false;
   const raw=gi.value.trim(),k=strip(raw).replace(/\s+/g,'');
   if(!k)return;
   if(C.st.g.indexOf(k)>=0){setMsg('Tohle už jsi zkoušel.',1800);return;}
   if(!VI[k]){
     /* slovo mimo slovník: hned ho přijmeme jako velmi vzdálené, bez čekání na AI */
     if(!/^[a-zA-Z\u00C0-\u017F]{2,24}$/.test(raw)){setMsg('Tohle není slovo.',2000);return;}
-    let r=null,aiFail=false;
+    let r=null;
     if(USE_AI){
       busyAI=true;setMsg('Písař listuje slovníkem…');
       r=await askAI(C,raw);busyAI=false;
