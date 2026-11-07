@@ -280,7 +280,7 @@ h1{animation:glow 5s ease-in-out infinite}
     <button class="tab" id="navCastle" type="button" aria-selected="false">Hrad</button>
   </nav>
 
-  <p class="foot">Slovo dne se mění o půlnoci. Postup se ukládá v tomto prohlížeči, po přihlášení přes Google i do tvého účtu. <button class="tab" id="expUnk" type="button" style="margin-left:8px;font-size:12px;padding:4px 8px"></button></p>
+  <p class="foot">Slovo dne se mění o půlnoci. Postup se ukládá k tvému účtu. <button class="tab" id="expUnk" type="button" style="margin-left:8px;font-size:12px;padding:4px 8px"></button></p>
 </div>
 
 <script>
@@ -998,7 +998,7 @@ async function fbWatch(){
   const f=await fbLoad();
   if(f.watching)return f;
   f.watching=true;
-  f.Au.onAuthStateChanged(f.auth,u=>{fbUser=u||null;if(!u)FR={code:null,list:[],inc:[],out:[]};renderTools();if(u)syncDown().then(friendsInit);});
+  f.Au.onAuthStateChanged(f.auth,u=>{fbUser=u||null;if(!u)FR={code:null,list:[],inc:[],out:[]};renderTools();if(u){hideGate();syncDown().then(friendsInit);}else showGate('login');});
   return f;
 }
 const better=(a,b)=>(a.won||0)!==(b.won||0)?(a.won||0)>(b.won||0):(a.t||0)>(b.t||0);
@@ -1017,16 +1017,21 @@ function applyState(){
 }
 async function syncDown(){
   if(!fbUser)return;
+  const uid=fbUser.uid;
   try{
-    const f=await fbLoad(),snap=await f.Fs.getDoc(f.Fs.doc(f.db,'users',fbUser.uid));
-    if(snap.exists()){
-      let cloud=null;try{cloud=JSON.parse(snap.data().state||'null');}catch(e){}
-      if(cloud&&cloud.v===3&&better(cloud,S)){
-        S=cloud;try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
-        applyState();setMsg('Postup načten z tvého účtu.',3500);return;
-      }
-    }
-    await pushUp();
+    const f=await fbLoad(),snap=await f.Fs.getDoc(f.Fs.doc(f.db,'users',uid));
+    let cloud=null;
+    if(snap.exists()){try{cloud=JSON.parse(snap.data().state||'null');}catch(e){}}
+    if(cloud&&cloud.v!==3)cloud=null;
+    const foreign=!!S.uid&&S.uid!==uid;   /* lokální postup patří jinému účtu, ten se nikdy nepřenáší */
+    let useCloud=false;
+    if(foreign){S=cloud||fresh();useCloud=true;ui.disp=S.seenN||0;ui.grow=null;}
+    else if(cloud&&better(cloud,S)){S=cloud;useCloud=true;}
+    S.uid=uid;S.streak=S.streak||{n:0,last:null,best:0};
+    if(S.seenN==null||S.seenN>nWords())S.seenN=nWords();
+    try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+    if(useCloud){applyState();if(cloud)setMsg('Postup načten z tvého účtu.',3500);}
+    if(!cloud||!useCloud)await pushUp();
   }catch(e){
     console.warn('Synchronizace selhala:',e);
     setMsg('Účet teď nejde načíst, hraje se lokálně ('+String(e&&e.code||e&&e.message||e).slice(0,60)+').',6000);
@@ -1044,9 +1049,42 @@ async function doLogin(){
   }
 }
 async function doLogout(){
+  clearTimeout(syncT);
+  try{await pushUp();}catch(e){}
   try{const f=await fbLoad();await f.Au.signOut(f.auth);}catch(e){}
-  try{localStorage.removeItem('sk-login');}catch(e){}
-  fbUser=null;FR={code:null,list:[],inc:[],out:[]};renderTools();setMsg('Odhlášeno. Postup zůstává v tomto prohlížeči.',3500);
+  try{localStorage.removeItem('sk-login');localStorage.removeItem('sk-nick');localStorage.removeItem(KEY);}catch(e){}
+  fbUser=null;FR={code:null,list:[],inc:[],out:[]};
+  S=fresh();ui.disp=0;ui.grow=null;
+  applyState();renderTools();showGate('login');
+}
+/* ---------- povinné přihlášení: celá hra je za úvodní obrazovkou ---------- */
+let gateEl=null,gateMode='';
+function showGate(mode,note){
+  gateMode=mode;
+  if(!gateEl){gateEl=document.createElement('div');gateEl.className='ov';gateEl.style.cssText='z-index:90;background:var(--night)';document.body.appendChild(gateEl);}
+  const d=document.createElement('div');d.className='dlg';
+  const h=document.createElement('h2');h.textContent='Slovní království';d.appendChild(h);
+  const p=document.createElement('p');
+  if(mode==='loading'){p.textContent=note||'Načítám tvůj účet…';d.appendChild(p);}
+  else{
+    p.textContent='Přihlas se přes Google. Hrad, série i přátelé se ukládají k tvému účtu, takže postup máš na každém zařízení.';d.appendChild(p);
+    const b=document.createElement('button');b.type='button';b.className='btn';b.textContent='Přihlásit přes Google';b.addEventListener('click',gateLogin);d.appendChild(b);
+    if(note){const m=document.createElement('div');m.className='fmsg';m.setAttribute('role','status');m.textContent=note;d.appendChild(m);}
+    setTimeout(()=>b.focus(),0);
+  }
+  gateEl.replaceChildren(d);
+}
+function hideGate(){if(gateEl){gateEl.remove();gateEl=null;gateMode='';}}
+async function gateLogin(){
+  showGate('loading','Čekám na přihlášení…');
+  try{
+    const f=await fbWatch();
+    await f.Au.signInWithPopup(f.auth,new f.Au.GoogleAuthProvider());
+    try{localStorage.setItem('sk-login','1');}catch(e){}
+  }catch(e){
+    const c=String(e&&e.code||e&&e.message||e);
+    showGate('login',/popup-closed|cancelled/.test(c)?'Přihlášení bylo zrušeno.':'Přihlášení se nepovedlo ('+c.slice(0,80)+').');
+  }
 }
 function renderTools(){
   const el=$('tools');if(!el)return;el.innerHTML='';
@@ -1332,7 +1370,9 @@ if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
 initCastle();
 renderTools();updUnk();
 {const eb=$('expUnk');if(eb)eb.addEventListener('click',expUnk);}
-try{if(localStorage.getItem('sk-login')==='1')fbWatch().catch(e=>console.warn('Přihlášení se neobnovilo:',e));}catch(e){}
+showGate('loading','Načítám tvůj účet…');
+fbWatch().catch(e=>{console.warn('Přihlášení se nenačetlo:',e);showGate('login','Nepodařilo se spojit s přihlášením. Zkontroluj připojení a zkus to znovu.');});
+setTimeout(()=>{if(gateMode==='loading'&&!fbUser)showGate('login','Načítání účtu trvá dlouho. Zkus se přihlásit.');},10000);
 try{if(!localStorage.getItem('sk-tut-v1'))openTut(0);}catch(e){}
 setInterval(tick,1000);
 if(!reduce)requestAnimationFrame(frame);
