@@ -258,7 +258,7 @@ h1{animation:glow 5s ease-in-out infinite}
 (function(){
 'use strict';
 const MULT=31;
-const USE_AI=false;               /* true = neznámá slova hodnotí AI (pomalejší), false = hned nízká úroveň */
+const USE_AI=true;                /* true = neznámá slova hodnotí AI (pomalejší), false = hned nízká úroveň */
 const EXTRA_WORDS=true;           /* false = jen jedno slovo denně, bez extra slov */
 const KEY='slovni-kralovstvi-v1';
 const reduce=!!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -819,7 +819,7 @@ cs:"ráno večer zima léto jaro podzim rok den",
 tl:"hlava oko ucho nos ruka noha kost krev tvář vlasy zub prst záda břicho",
 dm:"stůl židle postel lampa okno hrnek nůž lžíce vidlička koberec skříň zrcadlo košile kabát boty čepice šaty deka polštář",
 dp:"auto vlak letadlo kolo autobus silnice motor semafor nádraží lokomotiva metro",
-tc:"počítač telefon internet televize robot rádio baterie kabel elektřina stroj fotoaparát klávesnice myš obrazovka",
+tc:"počítač telefon mobil internet televize robot rádio baterie kabel elektřina stroj fotoaparát klávesnice myš obrazovka",
 sp:"fotbal hokej tenis míč branka plavání běh šachy karty kostky hra závod medaile tým",
 sk:"škola učitel žák věda matematika číslo písmeno slovo jazyk dějepis zeměpis hodina vysvědčení tabule",
 zd:"nemoc lék doktor nemocnice zdraví bolest horečka léčba",
@@ -895,6 +895,11 @@ function renderGuesses(){
   $('gCount').textContent=g.length?'Tipů: '+g.length:'Háčky psát nemusíš';
 }
 let busyAI=false;
+/* ohnuté tvary slov ze slovníku (hradu, mobilu…): vezmeme blízký slovníkový tvar a jeho blízkost k tajnému slovu */
+function stemFind(k){let best=null,bl=0;
+  for(const o of V){const a=o.k,n=Math.min(a.length,k.length);let i=0;while(i<n&&a[i]===k[i])i++;
+    if(i>=4&&i>=n-2&&Math.abs(a.length-k.length)<=3&&i>bl){bl=i;best=a;}}
+  return best;}
 const withTO=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Časový limit '+ms/1000+' s, Firebase neodpověděl')),ms))]);
 async function askAI(C,w){
   const P='Hra na hádání slov. Tajné slovo: "'+C.full+'". Hráčův tip: "'+w.slice(0,40)+'". Buď přísný: slova jen z podobného oboru dej 15-35, opravdu blízká 40-70, téměř synonyma 71-95. Odpověz POUZE JSON bez dalšího textu: {"real":true nebo false (je tip skutečné české slovo, i ohnuté),"score":0-100 (sémantická blízkost k tajnému slovu; 100 jen pro totéž slovo, běžná slova bez vztahu 0-15),"hint":"nejvýše 8 českých slov, vtipná středověká poznámka k SAMOTNÉMU tipu (ne k tajnému slovu); nesmí obsahovat tajné slovo, jeho synonyma ani žádnou informaci o něm"}';
@@ -904,9 +909,9 @@ async function askAI(C,w){
   const parse=t=>{const o=JSON.parse((String(t).match(/\{[\s\S]*\}/)||[''])[0]);
     return{real:!!o.real,rank:Math.max(2,Math.round(Math.pow(1-Math.min(99,+o.score||0)/100,1.8)*V.length)),hint:String(o.hint||'').slice(0,80)};};
   const racers=[];
-  if(window.fbAsk)racers.push(withTO(window.fbAsk(P),3500).then(parse));
+  if(window.fbAsk)racers.push(withTO(window.fbAsk(P),7000).then(parse));
   else window.lastAIError='Firebase AI se nenačetla'+(window.fbErr?' ('+window.fbErr+')':'')+'.';
-  racers.push(withTO(fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-5-5",max_tokens:150,messages:[{role:"user",content:P}]})}),3500)
+  racers.push(withTO(fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-5-5",max_tokens:150,messages:[{role:"user",content:P}]})}),7000)
     .then(r=>r.json()).then(d=>parse(d.content.map(i=>i.text||'').join(''))));
   try{
     const r=await Promise.any(racers);
@@ -931,7 +936,7 @@ async function submit(e){
       if(cur!==C)return;
       if(r&&!r.real){setMsg('Tohle není české slovo.',2400);return;}
     }
-    if(!r)r={real:true,rank:Math.round(V.length*.9),hint:''};
+    if(!r){const sf=stemFind(k);r={real:true,rank:sf&&C.rk[sf]?Math.max(2,C.rk[sf]):Math.round(V.length*.9),hint:''};}
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
   C.st.g.push(k);gi.value='';setMsg('');
