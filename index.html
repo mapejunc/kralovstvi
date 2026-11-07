@@ -1037,10 +1037,11 @@ async function pushUp(){
 }
 function cloudPush(){if(!fbUser||!fb)return;clearTimeout(syncT);syncT=setTimeout(pushUp,1500);}
 function applyState(){
+  if(!ui.grow)ui.disp=Math.min(S.seenN==null?nWords():S.seenN,nWords());
   startDaily();
   if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
   renderAll();updateNav();
-  requestAnimationFrame(()=>{layout();redraw();});
+  requestAnimationFrame(()=>{layout();redraw();if(stageVisible())startGrow();});
 }
 async function syncDown(){
   if(!fbUser)return;
