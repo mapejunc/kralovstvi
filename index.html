@@ -206,11 +206,40 @@ h1{animation:glow 5s ease-in-out infinite}
 .nav .tab[aria-selected="true"]{background:linear-gradient(#9468d4,#6a3fa8)}
 @media (prefers-reduced-motion: reduce){body::before,h1{animation:none !important}}
 </style>
+<style>
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.tools .tab{padding:6px 12px;font-size:14px}
+.ov{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(10,6,16,.84)}
+.dlg{width:100%;max-width:440px;background:linear-gradient(#2e2340,#221a30);box-shadow:0 0 0 2px var(--edge),0 0 0 4px var(--edge-hi),0 14px 30px #000a;padding:20px 18px 18px;display:flex;flex-direction:column;gap:12px}
+.dlg h2{margin:0;font-size:24px;line-height:1.1;color:var(--gold)}
+.dlg p{margin:0}
+.dst{color:var(--parch-dim);font-size:13px;text-transform:uppercase;letter-spacing:.1em}
+.dsc{display:flex;flex-wrap:wrap;gap:6px}
+.dsc span{font-size:13px;padding:4px 8px;background:#1a1324;border-left:4px solid var(--hc);box-shadow:0 0 0 2px var(--edge)}
+
+.dlg.fd{max-width:540px;max-height:92vh;overflow:auto}
+.fcode{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#1a1324;padding:10px 12px;box-shadow:0 0 0 2px var(--edge)}
+.fcode b{font-size:30px;letter-spacing:.18em;color:var(--gold);font-variant-numeric:tabular-nums}
+.frow{display:flex;gap:8px}
+.frow input{flex:1;min-width:0;font:inherit;font-size:18px;padding:9px 12px;background:#150f1e;color:var(--parch);border:0;box-shadow:inset 0 0 0 2px var(--edge-hi);outline:0;text-transform:uppercase}
+.frow input.nm{text-transform:none}
+.frow input:focus{box-shadow:inset 0 0 0 2px var(--gold)}
+.fh{margin:6px 0 0;font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--parch-dim)}
+.fc{background:#1a1324;padding:10px 12px;box-shadow:0 0 0 2px var(--edge);display:flex;flex-direction:column;gap:6px}
+.fc .t{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.fc .t b{font-size:18px}.fc .t span{color:var(--gold);font-variant-numeric:tabular-nums}
+.fc .bar{height:8px;background:var(--edge)}.fc .bar i{display:block;height:100%;background:var(--banner-hi)}
+.fc .s{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--parch-dim);font-size:14px}
+.fc .x{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.fmsg{min-height:20px;color:var(--gold);font-size:14px}
+.lnk{background:none;border:0;color:var(--parch-dim);text-decoration:underline;cursor:pointer;font-size:13px;padding:0}
+</style>
 <div class="page">
   <header class="top">
     <div>
       <h1>Slovní království</h1>
       <p class="tag">Hádej tajné slovo. Čím blíž významem, tím žhavěji hoří království. Uhodneš a hrad naroste o patro.</p>
+      <div class="tools" id="tools"></div>
     </div>
     <div class="stats">
       <div class="stat gold" id="stPieces"><b id="nPieces">5 m</b><span>Výška</span></div>
@@ -251,14 +280,14 @@ h1{animation:glow 5s ease-in-out infinite}
     <button class="tab" id="navCastle" type="button" aria-selected="false">Hrad</button>
   </nav>
 
-  <p class="foot">Slovo dne se mění o půlnoci. Postup království se ukládá jen v tomto prohlížeči.</p>
+  <p class="foot">Slovo dne se mění o půlnoci. Postup se ukládá v tomto prohlížeči, po přihlášení přes Google i do tvého účtu. <button class="tab" id="expUnk" type="button" style="margin-left:8px;font-size:12px;padding:4px 8px"></button></p>
 </div>
 
 <script>
 (function(){
 'use strict';
 const MULT=31;
-const USE_AI=true;                /* true = neznámá slova hodnotí AI (pomalejší), false = hned nízká úroveň */
+const USE_AI=false;                /* true = neznámá slova hodnotí AI (pomalejší), false = hned nízká úroveň */
 const EXTRA_WORDS=true;           /* false = jen jedno slovo denně, bez extra slov */
 const KEY='slovni-kralovstvi-v1';
 const reduce=!!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -271,8 +300,9 @@ function fresh(){return{v:3,won:0,extra:0,royalN:0,daily:0,seenN:0,streak:{n:0,l
 function load(){try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);
   if(o&&o.v===3)return o;
   if(o&&(o.v===1||o.v===2)){const n=fresh();n.won=o.won||0;n.daily=o.daily||0;n.day=o.day||null;n.bonus=o.bonus||null;n.royal=o.royal||null;n.seenN=n.won;return n;}}}catch(e){}return fresh();}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function save(){try{S.t=Date.now();localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}cloudPush();}
 let S=load();
+let fb=null,fbUser=null,syncT=0;
 const nWords=()=>(S.won||0)+(S.extra||0);
 if(S.seenN==null||S.seenN>nWords())S.seenN=nWords();
 S.streak=S.streak||{n:0,last:null,best:0};
@@ -841,7 +871,15 @@ const hj=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%997;ret
 const SEC=SECRET.map(strip).filter(k=>VI[k]);
 const ROY='svoboda spravedlnost pravda moudrost osud svědomí tajemství stín paměť dědictví rovnováha smysl pokora'.split(' ').map(strip).filter(k=>VI[k]);
 const wordIndexFor=dn=>((dn*MULT)%SEC.length+SEC.length)%SEC.length;
-function rankFor(k){const s=VI[k],r={};V.map(o=>({o:o,s:o===s?9:sim(o,s)+hj(o.k+k)*.004})).sort((a,b)=>b.s-a.s).forEach((x,i)=>{r[x.o.k]=i+1;});return r;}
+const NR={král:"královna trůn koruna princ princezna panovník vladař žezlo císař dvůr dvořan kníže vévoda hrad palác poddaný šlechtic rytíř císařovna dynastie korunovace zeměpán regent vláda dědic následník monarcha královský",královna:"král princezna koruna trůn princ dvůr panovník paní dvořan hrad palác žezlo kníže císařovna manželka svatba šlechtična komorná dvořanka korunovace dědic vládkyně šaty klenot",princ:"princezna král královna rytíř hrad kůň koruna trůn dědic následník kníže vévoda dvůr meč šlechtic zámek pohádka drak svatba ženich mládenec palác dvořan panovník",princezna:"princ královna král hrad věž drak pohádka koruna šaty zámek dcera dívka nevěsta rytíř víla trůn zlato zrcadlo kouzlo palác dvůr svatba šlechtična klenot",kníže:"král princ vévoda hrabě šlechtic pán panovník vladař trůn dvůr hrad zámek koruna baron rytíř dědic kancléř markrabě poddaný panství vojevůdce zeměpán císař šlechta aristokrat",trůn:"král koruna královna žezlo vladař panovník dvůr císař sál hrad komnata moc vláda dědic dynastie princ kníže korunovace zlato křeslo palác regent monarcha purpur dvořan",koruna:"král královna trůn žezlo zlato drahokam diamant klenot šperk vladař princ princezna panovník císař moc rubín perla dvůr bohatství hlava smaragd safír korunovace poklad",žezlo:"král koruna trůn vladař panovník moc císař královna zlato klenot hůl vláda dvůr symbol korunovace princ dynastie monarcha regent zeměpán zlatý drahokam sál",rytíř:"meč štít brnění kůň helma kopí hrad turnaj zbroj válka bitva odvaha čest král armáda zbraň souboj oštěp voják boj válečník kopiník princezna drak erb věrnost",meč:"rytíř štít dýka kopí zbraň čepel brnění bitva šavle kord boj válka kovář ocel železo helma luk válečník souboj pochva oštěp rukojeť voják zbroj",štít:"meč rytíř brnění helma kopí obrana zbroj bitva zbraň válka voják erb ochrana kovář ocel dýka boj souboj pancíř oštěp turnaj kůň",kopí:"oštěp meč štít luk šíp zbraň rytíř kopiník střela bitva lov válka voják kůň brnění helma turnaj dýka halapartna sekera prak katapult",luk:"šíp kuše střelec kopí zbraň lovec tětiva meč štít lov les voják bitva oštěp terč střela rytíř hrad kopiník dýka halapartna",šíp:"luk kuše střelec tětiva zbraň lovec kopí střela bitva terč les oštěp meč lov voják štít dýka hrad rytíř kopiník",helma:"brnění štít meč rytíř zbroj hlava ochrana kovář bitva voják pancíř ocel železo kopí turnaj hrad erb dýka boj zbraň",brnění:"helma štít meč rytíř zbroj pancíř kov ocel železo kovář bitva turnaj kopí zbraň voják ochrana válka erb dýka",hrad:"zámek věž tvrz hradba brána příkop pevnost most král rytíř palác citadela bašta opevnění nádvoří komnata trůn město sklep žalář vězení obléhání kobka",věž:"hrad hradba zvonice zámek brána pevnost okno schody tvrz hlídka bašta strážní cimbuří střecha hodiny komín vrchol výška kostel katedrála maják",brána:"hrad hradba věž most příkop vrata zámek vchod mříž pevnost město stráž dveře zeď ulice vjezd opevnění cesta",hradba:"hrad věž brána příkop pevnost zeď opevnění obrana město obléhání bašta cimbuří stráž zámek tvrz most kámen citadela útok nepřítel vojsko",příkop:"hrad hradba most voda brána obrana zeď pevnost opevnění zámek tvrz věž stráž louže řeka bahno žába město hloubka útok",most:"příkop hrad řeka brána cesta lávka přechod hradba voda břeh brod loď oblouk kámen pilíř silnice stezka vesnice město pevnost zámek",mlýn:"mlynář mouka obilí řeka kolo pekař chléb pole voda zrno žernov sedlák vesnice potok kámen pytel žito pšenice vítr jez splav",studna:"voda vědro pramen kámen vesnice hrad žízeň hloubka dvůr řetěz kolo déšť potok řeka rybník nádvoří žába dno nebe pít",kovář:"kovárna železo kladivo kovadlina meč pec oheň ocel hřebík podkova kování výheň měch kleště zbrojíř řemeslník zbraň kůň štít brnění uhlí řemeslo žár",kovárna:"kovář kladivo železo kovadlina oheň pec meč ocel výheň měch kování kleště podkova hřebík zbrojíř uhlí řemeslník žár dílna jiskra",zlato:"stříbro poklad mince klenot bohatství drahokam koruna truhla zlatník peníze šperk diamant perla prsten cenný drahý lesk žlutý kov měď zlatý skrýš pirát drak",železo:"ocel kov kovář meč ruda kovárna hřebík brnění důl kladivo rez štít kopí zbraň pec uhlí horník slitina měď bronz olovo",mince:"peníze zlato stříbro peněženka obchod trh zlatník měď bohatství platba kupec cena pokladna dukát groš koruna pokladnice mzda poklad truhla úplatek",pole:"obilí pluh sedlák žně louka seno úroda mez zahrada orba setí zrno žito pšenice farmář statek traktor vesnice les rolník hnůj",obilí:"pole mouka chléb žně sedlák mlýn zrno pšenice klas žito ječmen oves sklizeň úroda stodola sláma orba kukuřice pekař seno",chléb:"mouka pekař obilí mlýn pec máslo jídlo hostina sýr rohlík bulka koláč buchta snídaně oběd večeře sůl stůl pekárna hlad kuchyně",pivo:"hospoda chmel sud pohár víno hostina hospodský džbán hostinec číše medovina rum opilec žízeň pěna ječmen slad pít nápoj číšník",víno:"hrozny pohár hostina pivo sud vinice číše džbán nápoj opilec láhev medovina hospoda sklep sklenice červené bílé chuť pít",hostina:"jídlo víno pivo stůl kuchař král oslava tanec hudba svatba pozvání pečeně sál host talíř číše pohár zpěv kuchyně dort",kůň:"jezdec sedlo kopyto jezdit rytíř hříbě stáj podkova koňský ohrada pastvina sláma seno klus cval vozka kočár povoz kovář zvíře kobyla hřebec",vlk:"smečka les liška pes zvíře šelma vytí tlapa dravec medvěd noc měsíc jelen ovce lov hlad zub pastýř kožešina chlupatý vlčák",medvěd:"les med zvíře šelma vlk dravec tlapa kožešina jeskyně zima spánek ryba chlupatý brloh drápy hnědý lov kmen liška jelen",drak:"oheň ještěr zlato poklad rytíř princezna křídla netvor jeskyně plameny šupiny ocas drápy příšera pohádka bestie obr hrad kouzlo plamen čaroděj",sokol:"orel pták dravec křídla lov jestřáb výr káně luňák peří hnízdo vzduch let zobák rytíř lovec vysoko pařát obloha vrána",orel:"sokol pták dravec křídla jestřáb luňák káně výr peří hnízdo vzduch let zobák pařát hora obloha vysoko skála symbol král lov",řeka:"potok voda břeh most loď rybář ryba proud jezero rybník pramen moře ústí tok vlna brod mlýn pláň údolí povodeň splav pobřeží",les:"strom dub lípa mýtina houba zvěř lovec stezka kmen větev jelen vlk medvěd mech kapradí jehličí háj bor křoví hora potok stín zvíře",hora:"kopec skála vrch údolí vrchol sníh strmý jeskyně stezka hřeben průsmyk les lom kámen výška pahorek planina horník potok orel",strom:"les dub lípa větev kmen list kořen koruna jabloň smrk buk bříza jedle zahrada ovoce stín listí pařez sad sekyra borovice hrušeň",oheň:"plamen jiskra žár kouř popel dřevo hořet uhlí táborák pochodeň hranice požár svíčka světlo teplo spálit krb žhavý sopka kovárna",bouře:"blesk hrom déšť vítr mrak vichřice průtrž noc voda loď vlny bouřka povodeň záplava hřmění tma oblačno krupobití",kniha:"svitek pergamen pero písmo kronika list román příběh knihovna autor čtenář stránka kapitola básník inkoust papír mnich zákon slovník deník psát",svitek:"pergamen kniha pero písmo kronika listina písař mnich zákon smlouva papír inkoust pečeť dopis nápis zpráva archiv stránka kouzlo text",pečeť:"vosk listina svitek dopis smlouva znak král razítko podpis zákon dokument pergamen písař erb zapečetit tajemství zpráva signet kříž prsten",zákon:"soud právo řád trest sudí soudce král povinnost pravidlo spravedlnost kniha vězení kat zločin vina obžaloba svitek hřích přísaha pořádek vyhláška",trh:"kupec obchod zboží prodavač cena stánek tržiště peníze mince náměstí jarmark nákup prodej směna kořist krám tlačenice sleva zlato",kupec:"obchod trh zboží cena peníze mince karavana prodej nákup obchodník tržiště směna zlato cesta zisk velbloud koření vůz poklad cizina",poklad:"zlato truhla klenot drahokam mince pirát skrýš mapa drak diamant stříbro bohatství perla koruna ostrov jeskyně lupič zakopat šperk rubín kořist",zloděj:"lupič kapsář krást ukradnout noc poklad vězení stráž kat trest zlato mince bandita lotr tulák žalář zločin prsten stín lup loupež",mnich:"klášter modlitba kněz opat kaple kniha svitek kutna kříž bůh víra ticho zvon písař kostel jeptiška biskup zpověď pivo pokora cela papež",šašek:"kejklíř dvůr král smích žert čepice rolničky šaškovat komediant vtip zábava bavič kostým maska tanec hostina trůn cirkus herec hlupák",čaroděj:"kouzlo hůl magie kouzelník čarodějka lektvar elixír věž kniha mág zaklínač vlkodlak drak duch pohádka alchymista runa zaklínadlo amulet bylina",kouzlo:"čaroděj magie hůl čáry zaklínadlo lektvar elixír víla kouzelník kletba talisman amulet runa přízrak pohádka duch drak příšera zázrak čarodějka mág",víla:"kouzlo les pohádka křídla magie elf lesní motýl tanec jezero kouzelná louka květ svit mlha princezna čarodějka rusalka stezka",trpaslík:"skřítek hora důl zlato kladivo trpasličí pohádka kovář jeskyně sekyra krátký vous elf obr šperk kámen klenot poklad čepice skřet horník",harfa:"struny hudba píseň bard zpěv nástroj tón melodie anděl zvuk loutna flétna housle trubka koncert hudebník struna tanec drnkat hrát zpěvák",píseň:"zpěv hudba melodie text bard zpěvák nota tón refrén harfa loutna tanec zpívat hymna ukolébavka koncert hudebník skladba rytmus verš",tanec:"hudba píseň rej bál pár kroky taneční zpěv svatba radost hostina muzikant bubny flétna šašek oslava pohyb sál dudy kolo rytmus párty",láska:"srdce polibek vášeň objetí něha věrnost city touha přátelství manželství nevěsta ženich růže slza radost pár princezna svatba cit zamilovaný",odvaha:"statečnost hrdina strach rytíř hrdinství čest síla srdnatost bojovník válka bitva dobrodruh vítězství hrdinný nebojácný sebevědomí vůle překonat nebezpečí",čest:"věrnost odvaha rytíř slovo hrdost sláva přísaha poctivost svědomí pověst jméno stud pokora hrdinství důstojnost úcta zásada vznešený",zrada:"zrádce lež úklad spiknutí zrazen věrnost podvod nepřítel vražda dýka vina trest kat spiklenec zloba smrt intrika vzpoura pomsta strach nevěra"};
+const NEAR={};Object.keys(NR).forEach(k=>{NEAR[strip(k)]=NR[k].split(" ").map(strip);});
+/* ručně vybraná nejbližší slova mají přednost (pořadí 2, 3, 4…), ostatní se řadí podle sdílených oborů */
+function rankFor(k){const s=VI[k],r={};
+  const L=(NEAR[k]||[]).filter((w,i,a)=>w!==k&&a.indexOf(w)===i);
+  r[k]=1;L.forEach((w,i)=>{r[w]=i+2;});
+  const base=L.length+2;
+  V.filter(o=>o!==s&&!(o.k in r)).map(o=>({o:o,s:sim(o,s)+hj(o.k+k)*.004})).sort((a,b)=>b.s-a.s).forEach((x,i)=>{r[x.o.k]=base+i;});
+  return r;}
 const ST=[[3,'Plameny nad hradem','#ffcf3a','Skoro! Už slyšíš zvonit zvony.'],[8,'Hoří hradby','#ff8a1f','Hoří! Jsi na stopě.'],[20,'Kovárna žhne','#f0601e','Přihořívá. Železo je žhavé, ale ještě ne to pravé.'],[50,'Táborák','#d0503a','Plápolá oheň, jen jiskra ještě nepřeskočila.'],[110,'Dým z komína','#a8745e','Vlažno. Někde se topí, ale daleko.'],[200,'Studna','#5b86b8','Chladno. Tady najdeš jen vodu.'],[1e9,'Ledová brána','#4a62a8','Mráz. Tohle království je úplně jinde.']];
 const heat=r=>ST.find(x=>r<=x[0]);
 const pctOf=r=>Math.max(3,Math.round(100*(1-Math.log(r)/Math.log(V.length))));
@@ -904,6 +942,284 @@ function renderGuesses(){
   $('guesses').innerHTML=g.slice(0,-1).sort((a,b)=>rk(a)-rk(b)).map(k=>card(k,false)).join('');
   $('gCount').textContent=g.length?'Tipů: '+g.length:'Háčky psát nemusíš';
 }
+
+/* ---------- neznámá slova: ukládají se u hráče, aby šla dopsat do slovníku ---------- */
+const UK='sk-unknown';
+function unkObj(){try{return JSON.parse(localStorage.getItem(UK)||'{}')||{};}catch(e){return{};}}
+function unkList(){const o=unkObj();return Object.keys(o).sort((a,b)=>o[b]-o[a]).map(w=>w+'\t'+o[w]);}
+function updUnk(){const b=$('expUnk');if(b)b.textContent='Neznámá slova: '+Object.keys(unkObj()).length+' (zkopírovat)';}
+function logUnknown(w){try{const o=unkObj();o[w]=(o[w]||0)+1;const ks=Object.keys(o);if(ks.length>600){ks.sort((a,b)=>o[a]-o[b]);delete o[ks[0]];}localStorage.setItem(UK,JSON.stringify(o));}catch(e){}updUnk();}
+async function expUnk(){const t=unkList().join('\n');try{await navigator.clipboard.writeText(t);setMsg('Seznam zkopírován.',2500);}catch(e){window.prompt('Zkopíruj seznam:',t.replace(/\n/g,', '));}}
+window.skUnknown=unkList;
+
+/* ---------- tutoriál ---------- */
+const TUT=[
+ ['Hádej tajné slovo','Každý den je ukryté jedno slovo. Napiš libovolné slovo a stiskni Hádat. Háčky psát nemusíš.'],
+ ['Čím žhavěji, tím blíž','Hra hodnotí, jak blízko je tvůj tip významem k tajnému slovu, ne písmeny. Tohle jsou stupně od nejchladnějšího po nejžhavější:','scale'],
+ ['Hledej souvislosti','Zkoušej slova ze stejného oboru. Pod tipem se objeví „Společné: …“, což napoví, z jakého oboru tajné slovo je. Třeba u tajného slova „meč“ bude „rytíř“ hořet a „jablko“ zmrzne.'],
+ ['Postav hrad','Za každé uhodnuté slovo hrad naroste o patro. Série dní v řadě dává odměny, Královské slovo jednou týdně je za tři patra a po slově dne si můžeš zahrát extra slova.']
+];
+let tutEl=null;
+function tutKey(e){if(e.key==='Escape')closeTut();}
+function closeTut(){if(tutEl){tutEl.remove();tutEl=null;}document.removeEventListener('keydown',tutKey);try{localStorage.setItem('sk-tut-v1','1');}catch(e){}}
+function tutBtn(txt,cls,fn){const b=document.createElement('button');b.type='button';b.className=cls;b.textContent=txt;b.addEventListener('click',fn);return b;}
+function openTut(i){
+  if(tutEl)tutEl.remove();
+  const t=TUT[i],ov=document.createElement('div');ov.className='ov';tutEl=ov;
+  ov.addEventListener('click',e=>{if(e.target===ov)closeTut();});
+  const d=document.createElement('div');d.className='dlg';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Jak se hraje');
+  const st=document.createElement('div');st.className='dst';st.textContent='Krok '+(i+1)+' z '+TUT.length;
+  const h=document.createElement('h2');h.textContent=t[0];
+  const p=document.createElement('p');p.textContent=t[1];
+  d.appendChild(st);d.appendChild(h);d.appendChild(p);
+  if(t[2]==='scale'){const sc=document.createElement('div');sc.className='dsc';
+    ST.slice().reverse().forEach(x=>{const c=document.createElement('span');c.textContent=x[1];c.style.setProperty('--hc',x[2]);sc.appendChild(c);});d.appendChild(sc);}
+  const a=document.createElement('div');a.className='acts';
+  if(i>0)a.appendChild(tutBtn('Zpět','btn ghost',()=>openTut(i-1)));
+  const last=i>=TUT.length-1;
+  const nx=tutBtn(last?'Jdu hrát':'Další','btn',()=>{if(last)closeTut();else openTut(i+1);});a.appendChild(nx);
+  if(!last)a.appendChild(tutBtn('Přeskočit','btn ghost',closeTut));
+  d.appendChild(a);ov.appendChild(d);document.body.appendChild(ov);
+  document.removeEventListener('keydown',tutKey);document.addEventListener('keydown',tutKey);
+  nx.focus();
+}
+
+/* ---------- přihlášení přes Google a ukládání postupu do účtu (Firebase) ---------- */
+const FBC={apiKey:"AIzaSyCGhP46ocFfvzGCd32Ll1niMnnAfUtvFas",authDomain:"prihoriva-efd4b.firebaseapp.com",projectId:"prihoriva-efd4b",storageBucket:"prihoriva-efd4b.firebasestorage.app",messagingSenderId:"413826357424",appId:"1:413826357424:web:a28f55d792ef13c3c3c375"};
+const FBV='https://www.gstatic.com/firebasejs/12.12.0/';
+async function fbLoad(){
+  if(fb)return fb;
+  const A=await import(FBV+'firebase-app.js'),Au=await import(FBV+'firebase-auth.js'),Fs=await import(FBV+'firebase-firestore.js');
+  const app=A.initializeApp(FBC);
+  fb={Au:Au,Fs:Fs,auth:Au.getAuth(app),db:Fs.getFirestore(app),watching:false};
+  return fb;
+}
+async function fbWatch(){
+  const f=await fbLoad();
+  if(f.watching)return f;
+  f.watching=true;
+  f.Au.onAuthStateChanged(f.auth,u=>{fbUser=u||null;if(!u)FR={code:null,list:[],inc:[],out:[]};renderTools();if(u)syncDown().then(friendsInit);});
+  return f;
+}
+const better=(a,b)=>(a.won||0)!==(b.won||0)?(a.won||0)>(b.won||0):(a.t||0)>(b.t||0);
+async function pushUp(){
+  if(!fbUser||!fb)return;
+  try{await fb.Fs.setDoc(fb.Fs.doc(fb.db,'users',fbUser.uid),{state:JSON.stringify(S),t:Date.now()});}
+  catch(e){console.warn('Uložení do účtu selhalo:',e);}
+  pubProfile();
+}
+function cloudPush(){if(!fbUser||!fb)return;clearTimeout(syncT);syncT=setTimeout(pushUp,1500);}
+function applyState(){
+  startDaily();
+  if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
+  renderAll();updateNav();
+  requestAnimationFrame(()=>{layout();redraw();});
+}
+async function syncDown(){
+  if(!fbUser)return;
+  try{
+    const f=await fbLoad(),snap=await f.Fs.getDoc(f.Fs.doc(f.db,'users',fbUser.uid));
+    if(snap.exists()){
+      let cloud=null;try{cloud=JSON.parse(snap.data().state||'null');}catch(e){}
+      if(cloud&&cloud.v===3&&better(cloud,S)){
+        S=cloud;try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+        applyState();setMsg('Postup načten z tvého účtu.',3500);return;
+      }
+    }
+    await pushUp();
+  }catch(e){
+    console.warn('Synchronizace selhala:',e);
+    setMsg('Účet teď nejde načíst, hraje se lokálně ('+String(e&&e.code||e&&e.message||e).slice(0,60)+').',6000);
+  }
+}
+async function doLogin(){
+  try{
+    setMsg('Otevírám přihlášení…');
+    const f=await fbWatch();
+    await f.Au.signInWithPopup(f.auth,new f.Au.GoogleAuthProvider());
+    try{localStorage.setItem('sk-login','1');}catch(e){}
+  }catch(e){
+    const c=String(e&&e.code||e&&e.message||e);
+    setMsg(/popup-closed|cancelled/.test(c)?'Přihlášení bylo zrušeno.':'Přihlášení se nepovedlo ('+c.slice(0,80)+').',7000);
+  }
+}
+async function doLogout(){
+  try{const f=await fbLoad();await f.Au.signOut(f.auth);}catch(e){}
+  try{localStorage.removeItem('sk-login');}catch(e){}
+  fbUser=null;FR={code:null,list:[],inc:[],out:[]};renderTools();setMsg('Odhlášeno. Postup zůstává v tomto prohlížeči.',3500);
+}
+function renderTools(){
+  const el=$('tools');if(!el)return;el.innerHTML='';
+  const mk=(t,f)=>{const b=document.createElement('button');b.type='button';b.className='tab';b.textContent=t;b.addEventListener('click',f);el.appendChild(b);};
+  mk('? Jak hrát',()=>openTut(0));
+  mk('Přátelé'+(FR.inc.length?' ('+FR.inc.length+')':''),openFriends);
+  if(fbUser)mk('Odhlásit ('+String(fbUser.displayName||fbUser.email||'účet').split(' ')[0].slice(0,14)+')',doLogout);
+  else mk('Přihlásit přes Google',doLogin);
+}
+
+/* ---------- přátelé: kód, žádost s potvrzením, srovnání postupu ---------- */
+let FR={code:null,list:[],inc:[],out:[]};
+const CODE_AL='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const mkCode=()=>{const a=new Uint32Array(6);crypto.getRandomValues(a);let c='';for(const x of a)c+=CODE_AL[x%CODE_AL.length];return c;};
+const myName=()=>{try{const n=localStorage.getItem('sk-nick');if(n)return n;}catch(e){}return String(fbUser&&fbUser.displayName||'Hráč').split(' ')[0].slice(0,14)||'Hráč';};
+async function pubProfile(){
+  if(!fbUser||!fb||!FR.code)return;
+  try{await fb.Fs.setDoc(fb.Fs.doc(fb.db,'profiles',fbUser.uid),{name:myName(),code:FR.code,won:nWords(),streak:streakNow(),best:S.streak.best||0,height:heightM(),t:Date.now()});}
+  catch(e){console.warn('Profil se nepodařilo zveřejnit:',e);}
+}
+async function saveFriends(){
+  if(!fbUser)return;
+  try{const f=await fbLoad();await f.Fs.setDoc(f.Fs.doc(f.db,'friends',fbUser.uid),{list:FR.list});}catch(e){console.warn('Seznam přátel se neuložil:',e);}
+}
+async function refreshReq(){
+  const f=await fbLoad(),F=f.Fs,u=fbUser.uid;
+  const inc=await F.getDocs(F.query(F.collection(f.db,'requests'),F.where('to','==',u)));
+  FR.inc=[];inc.forEach(d=>{const x=d.data();if(x.status==='pending')FR.inc.push(Object.assign({id:d.id},x));});
+  const out=await F.getDocs(F.query(F.collection(f.db,'requests'),F.where('from','==',u)));
+  FR.out=[];let ch=false;
+  out.forEach(d=>{const x=d.data();if(x.status==='accepted'){if(FR.list.indexOf(x.to)<0){FR.list.push(x.to);ch=true;}}else FR.out.push(x);});
+  if(ch)await saveFriends();
+  renderTools();
+}
+async function friendsInit(){
+  if(!fbUser)return;
+  try{
+    const f=await fbLoad(),F=f.Fs,u=fbUser.uid;
+    const ps=await F.getDoc(F.doc(f.db,'profiles',u));
+    let code=ps.exists()?ps.data().code:null;
+    for(let i=0;i<8&&!code;i++){
+      const c=mkCode(),cs=await F.getDoc(F.doc(f.db,'codes',c));
+      if(!cs.exists()){await F.setDoc(F.doc(f.db,'codes',c),{uid:u});code=c;}
+    }
+    FR.code=code;
+    const fl=await F.getDoc(F.doc(f.db,'friends',u));
+    FR.list=fl.exists()?(fl.data().list||[]):[];
+    await pubProfile();
+    await refreshReq();
+  }catch(e){console.warn('Přátelé se nenačetli:',e);}
+}
+async function acceptReq(r){
+  const f=await fbLoad(),F=f.Fs;
+  await F.updateDoc(F.doc(f.db,'requests',r.id),{status:'accepted'});
+  if(FR.list.indexOf(r.from)<0)FR.list.push(r.from);
+  await saveFriends();await refreshReq();
+}
+async function declineReq(id){const f=await fbLoad();await f.Fs.deleteDoc(f.Fs.doc(f.db,'requests',id));await refreshReq();}
+async function removeFriend(uid){
+  const f=await fbLoad(),F=f.Fs,u=fbUser.uid;
+  FR.list=FR.list.filter(x=>x!==uid);await saveFriends();
+  try{await F.deleteDoc(F.doc(f.db,'requests',u+'_'+uid));}catch(e){}
+  try{await F.deleteDoc(F.doc(f.db,'requests',uid+'_'+u));}catch(e){}
+  await refreshReq();
+}
+async function addByCode(raw){
+  const code=String(raw||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(code.length!==6)return'Kód má 6 znaků.';
+  if(code===FR.code)return'To je tvůj vlastní kód.';
+  const f=await fbLoad(),F=f.Fs,u=fbUser.uid;
+  const cs=await F.getDoc(F.doc(f.db,'codes',code));
+  if(!cs.exists())return'Takový kód neexistuje.';
+  const tu=cs.data().uid;
+  if(FR.list.indexOf(tu)>=0)return'Tohle už je tvůj přítel.';
+  const inc=FR.inc.find(x=>x.from===tu);
+  if(inc){await acceptReq(inc);return'Hotovo, ten hráč ti žádost poslal taky, takže jste přátelé.';}
+  const ps=await F.getDoc(F.doc(f.db,'profiles',tu));
+  const tn=ps.exists()?String(ps.data().name||'Hráč'):'Hráč';
+  await F.setDoc(F.doc(f.db,'requests',u+'_'+tu),{from:u,to:tu,fromName:myName(),toName:tn,status:'pending',t:Date.now()});
+  await refreshReq();
+  return'Žádost odeslána hráči '+tn+'. Čeká na jeho potvrzení.';
+}
+let frEl=null;
+function frKey(e){if(e.key==='Escape')closeFriends();}
+function closeFriends(){if(frEl){frEl.remove();frEl=null;}document.removeEventListener('keydown',frKey);}
+function openFriends(){
+  if(frEl)frEl.remove();
+  const ov=document.createElement('div');ov.className='ov';frEl=ov;
+  ov.addEventListener('click',e=>{if(e.target===ov)closeFriends();});
+  const d=document.createElement('div');d.className='dlg fd';d.setAttribute('role','dialog');d.setAttribute('aria-modal','true');d.setAttribute('aria-label','Přátelé');
+  ov.appendChild(d);document.body.appendChild(ov);
+  document.removeEventListener('keydown',frKey);document.addEventListener('keydown',frKey);
+  drawFriends(d);
+}
+async function drawFriends(d){
+  const btn=(t,c,fn)=>{const b=document.createElement('button');b.type='button';b.className=c;b.textContent=t;b.addEventListener('click',fn);return b;};
+  d.innerHTML='<h2>Přátelé</h2>';
+  if(!fbUser){
+    d.insertAdjacentHTML('beforeend','<p>Aby sis mohl přidávat přátele, přihlas se přes Google. Dostaneš svůj kód a uvidíš postup ostatních.</p>');
+    const a=document.createElement('div');a.className='acts';
+    a.appendChild(btn('Přihlásit přes Google','btn',()=>{closeFriends();doLogin();}));
+    a.appendChild(btn('Zavřít','btn ghost',closeFriends));d.appendChild(a);return;
+  }
+  d.insertAdjacentHTML('beforeend','<p class="lead" style="color:var(--parch-dim)">Načítám…</p>');
+  try{await refreshReq();}catch(e){console.warn(e);}
+  if(!frEl)return;
+  d.innerHTML='<h2>Přátelé</h2>';
+  const msg=document.createElement('div');msg.className='fmsg';msg.setAttribute('role','status');
+  const say=t=>{msg.textContent=t;};
+  /* můj kód */
+  d.insertAdjacentHTML('beforeend','<p class="fh">Tvůj kód</p>');
+  const kc=document.createElement('div');kc.className='fcode';
+  const kb=document.createElement('b');kb.textContent=FR.code||'…';kc.appendChild(kb);
+  kc.appendChild(btn('Kopírovat','btn ghost',async()=>{try{await navigator.clipboard.writeText(FR.code||'');say('Kód zkopírován.');}catch(e){say('Kód si opiš ručně: '+FR.code);}}));
+  d.appendChild(kc);
+  /* jméno */
+  const nr=document.createElement('div');nr.className='frow';
+  const ni=document.createElement('input');ni.className='nm';ni.maxLength=14;ni.value=myName();ni.setAttribute('aria-label','Tvoje jméno pro přátele');
+  nr.appendChild(ni);
+  nr.appendChild(btn('Uložit jméno','btn ghost',()=>{const v=ni.value.replace(/[<>&"]/g,'').trim().slice(0,14);if(!v){say('Jméno nesmí být prázdné.');return;}try{localStorage.setItem('sk-nick',v);}catch(e){}pubProfile();say('Jméno uloženo.');}));
+  d.appendChild(nr);
+  /* přidat podle kódu */
+  d.insertAdjacentHTML('beforeend','<p class="fh">Přidat kamaráda</p>');
+  const ar=document.createElement('form');ar.className='frow';ar.autocomplete='off';
+  const ai=document.createElement('input');ai.maxLength=8;ai.placeholder='KÓD KAMARÁDA';ai.setAttribute('aria-label','Kód kamaráda');ai.autocapitalize='characters';ai.spellcheck=false;
+  ar.appendChild(ai);const ab=document.createElement('button');ab.type='submit';ab.className='btn';ab.textContent='Poslat žádost';ar.appendChild(ab);
+  ar.addEventListener('submit',async e=>{e.preventDefault();ab.disabled=true;say('Hledám…');
+    try{say(await addByCode(ai.value));ai.value='';await drawFriends(d);}
+    catch(err){console.warn(err);say('Nepovedlo se ('+String(err&&err.code||err&&err.message||err).slice(0,60)+').');}
+    ab.disabled=false;});
+  d.appendChild(ar);d.appendChild(msg);
+  /* příchozí žádosti */
+  if(FR.inc.length){
+    d.insertAdjacentHTML('beforeend','<p class="fh">Žádosti o přátelství</p>');
+    FR.inc.forEach(r=>{
+      const c=document.createElement('div');c.className='fc';
+      const t=document.createElement('div');t.className='t';const b=document.createElement('b');b.textContent=r.fromName||'Hráč';t.appendChild(b);c.appendChild(t);
+      const x=document.createElement('div');x.className='acts';
+      x.appendChild(btn('Potvrdit','btn',async()=>{try{await acceptReq(r);await drawFriends(d);}catch(e){say('Potvrzení se nepovedlo.');}}));
+      x.appendChild(btn('Odmítnout','btn ghost',async()=>{try{await declineReq(r.id);await drawFriends(d);}catch(e){say('Odmítnutí se nepovedlo.');}}));
+      c.appendChild(x);d.appendChild(c);});
+  }
+  if(FR.out.length){
+    d.insertAdjacentHTML('beforeend','<p class="fh">Čeká na potvrzení</p>');
+    FR.out.forEach(r=>{const c=document.createElement('div');c.className='fc';const b=document.createElement('b');b.textContent=r.toName||'Hráč';c.appendChild(b);
+      c.appendChild(btn('Zrušit žádost','lnk',async()=>{try{await declineReq(r.from+'_'+r.to);await drawFriends(d);}catch(e){say('Nepovedlo se.');}}));d.appendChild(c);});
+  }
+  /* seznam přátel */
+  d.insertAdjacentHTML('beforeend','<p class="fh">Tví přátelé</p>');
+  const box=document.createElement('div');box.style.cssText='display:flex;flex-direction:column;gap:10px';d.appendChild(box);
+  const closeRow=document.createElement('div');closeRow.className='acts';closeRow.appendChild(btn('Zavřít','btn ghost',closeFriends));
+  if(!FR.list.length){box.innerHTML='<p style="color:var(--parch-dim)">Zatím nikoho. Pošli kamarádovi svůj kód, nebo si napiš jeho.</p>';d.appendChild(closeRow);return;}
+  box.innerHTML='<p style="color:var(--parch-dim)">Načítám postup…</p>';
+  const f=await fbLoad(),F=f.Fs;
+  const profs=await Promise.all(FR.list.map(async uid=>{try{const sn=await F.getDoc(F.doc(f.db,'profiles',uid));return{uid:uid,p:sn.exists()?sn.data():null};}catch(e){return{uid:uid,p:null};}}));
+  if(!frEl)return;
+  profs.sort((a,b)=>((b.p&&b.p.height)||0)-((a.p&&a.p.height)||0));
+  const mx=Math.max(heightM(),...profs.map(x=>(x.p&&x.p.height)||0),1);
+  box.innerHTML='';
+  const card=(name,h,won,st,best,t,uid)=>{
+    const c=document.createElement('div');c.className='fc';
+    const tt=document.createElement('div');tt.className='t';const b=document.createElement('b');b.textContent=name;const sp=document.createElement('span');sp.textContent=h+' m';tt.appendChild(b);tt.appendChild(sp);c.appendChild(tt);
+    const bar=document.createElement('div');bar.className='bar';const i=document.createElement('i');i.style.width=Math.max(2,Math.round(h/mx*100))+'%';bar.appendChild(i);c.appendChild(bar);
+    const ss=document.createElement('div');ss.className='s';
+    [won+' '+cz(won,'slovo','slova','slov'),'série '+st+' '+cz(st,'den','dny','dní'),'rekord '+best].forEach(x=>{const e=document.createElement('span');e.textContent=x;ss.appendChild(e);});
+    if(t){const e=document.createElement('span');const dt=new Date(t);e.textContent='naposledy '+dt.getDate()+'. '+(dt.getMonth()+1)+'.';ss.appendChild(e);}
+    c.appendChild(ss);
+    if(uid){const x=document.createElement('div');x.className='x';x.appendChild(btn('Odebrat z přátel','lnk',async()=>{try{await removeFriend(uid);await drawFriends(d);}catch(e){say('Odebrání se nepovedlo.');}}));c.appendChild(x);}
+    return c;};
+  profs.forEach(x=>{const p=x.p;box.appendChild(p?card(String(p.name||'Hráč').slice(0,14),+p.height||5,+p.won||0,+p.streak||0,+p.best||0,p.t,x.uid):card('Neznámý hráč',5,0,0,0,0,x.uid));});
+  box.appendChild(card(myName()+' (ty)',heightM(),nWords(),streakNow(),S.streak.best||0,0,null));
+  d.appendChild(closeRow);
+}
 let busyAI=false;
 /* ohnuté tvary slov ze slovníku (hradu, mobilu…): vezmeme blízký slovníkový tvar a jeho blízkost k tajnému slovu */
 /* odvozená slova (včelař od včela, květina od květ): společný kořen aspoň 4 písmena, o něco dál než základní slovo */
@@ -948,9 +1264,10 @@ async function submit(e){
   if(!VI[k]){
     /* slovo mimo slovník: hned ho přijmeme jako velmi vzdálené, bez čekání na AI */
     if(!/^[a-zA-Z\u00C0-\u017F]{2,24}$/.test(raw)){setMsg('Tohle není slovo.',2000);return;}
-    let r=null;
+    let r=C.rk[k]?{real:true,rank:C.rk[k],hint:''}:null;
     const sf0=stemFind(k);
-    if(sf0&&C.rk[sf0])r={real:true,rank:Math.max(2,C.rk[sf0]),hint:''};
+    if(r){}
+    else if(sf0&&C.rk[sf0])r={real:true,rank:Math.max(2,C.rk[sf0]),hint:''};
     else if(USE_AI){
       busyAI=true;setMsg('Písař listuje slovníkem…');
       r=await askAI(C,raw);busyAI=false;
@@ -960,6 +1277,7 @@ async function submit(e){
     if(!r){const dv=rootFind(k);
       if(dv&&C.rk[dv]){r={real:true,rank:Math.max(3,Math.round(C.rk[dv]*1.6)+1),hint:'Příbuzné slovu „'+VI[dv].w+'“.'};}
       else{aiFail=USE_AI;r={real:true,rank:Math.round(V.length*.9),hint:aiFail?'AI nedostupná, hrubý odhad.':''};}}
+    if(!C.rk[k])logUnknown(raw.toLowerCase());
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
   C.st.g.push(k);gi.value='';setMsg('');
@@ -1012,33 +1330,14 @@ $('gf').addEventListener('submit',submit);
 startDaily();
 if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
 initCastle();
+renderTools();updUnk();
+{const eb=$('expUnk');if(eb)eb.addEventListener('click',expUnk);}
+try{if(localStorage.getItem('sk-login')==='1')fbWatch().catch(e=>console.warn('Přihlášení se neobnovilo:',e));}catch(e){}
+try{if(!localStorage.getItem('sk-tut-v1'))openTut(0);}catch(e){}
 setInterval(tick,1000);
 if(!reduce)requestAnimationFrame(frame);
 })();
 </script>
 
-<script type="module">
-/* Hodnocení neznámých slov přes Gemini (Firebase AI Logic). Když se nenačte, hra zkusí AI v náhledu Claude. */
-try{
-  const G='https://www.gstatic.com/firebasejs/12.12.0/',J='https://cdn.jsdelivr.net/npm/firebase@12.12.0/';
-  let FA=null,FI=null;
-  for(const u of [[G+'firebase-app.js',G+'firebase-ai.js'],[J+'app/+esm',J+'ai/+esm']]){
-    try{FA=await import(u[0]);FI=await import(u[1]);break;}catch(e){window.fbErr=String(e&&e.message||e).slice(0,160);FA=null;}
-  }
-  if(!FA)throw new Error(window.fbErr||'import');
-  const {initializeApp}=FA;
-  const {getAI,getGenerativeModel,GoogleAIBackend}=FI;
-  const app=initializeApp({
-    apiKey:"AIzaSyCGhP46ocFfvzGCd32Ll1niMnnAfUtvFas",
-    authDomain:"prihoriva-efd4b.firebaseapp.com",
-    projectId:"prihoriva-efd4b",
-    storageBucket:"prihoriva-efd4b.firebasestorage.app",
-    messagingSenderId:"413826357424",
-    appId:"1:413826357424:web:a28f55d792ef13c3c3c375"
-  });
-  const ai=getAI(app,{backend:new GoogleAIBackend()});
-  const model=getGenerativeModel(ai,{model:"gemini-3.8-flash",generationConfig:{responseMimeType:"application/json",maxOutputTokens:150,temperature:0.2}});
-  window.fbAsk=async p=>{const r=await model.generateContent(p);return r.response.text();};
-}catch(e){window.fbErr=String(e&&e.message||e).slice(0,120);console.warn('Firebase AI se nenačetla:',e);}
-</script>
+
 </body></html>
