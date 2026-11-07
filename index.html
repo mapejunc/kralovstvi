@@ -725,20 +725,21 @@ let busyAI=false;
 const withTO=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Časový limit '+ms/1000+' s, Firebase neodpověděl')),ms))]);
 async function askAI(C,w){
   const P='Hra na hádání slov. Tajné slovo: "'+C.full+'". Hráčův tip: "'+w.slice(0,40)+'". Buď přísný: slova jen z podobného oboru dej 15-35, opravdu blízká 40-70, téměř synonyma 71-95. Odpověz POUZE JSON bez dalšího textu: {"real":true nebo false (je tip skutečné české slovo, i ohnuté),"score":0-100 (sémantická blízkost k tajnému slovu; 100 jen pro totéž slovo, běžná slova bez vztahu 0-15),"hint":"nejvýše 8 českých slov, vtipná středověká poznámka k SAMOTNÉMU tipu (ne k tajnému slovu); nesmí obsahovat tajné slovo, jeho synonyma ani žádnou informaci o něm"}';
-  let t=null;
   window.lastAIError='';
-  if(window.fbAsk){for(let a=0;a<2&&t==null;a++){try{t=await withTO(window.fbAsk(P),20000);}catch(err){console.warn('Firebase AI:',err);window.lastAIError='Firebase: '+(err&&err.message||err);if(a<1)await new Promise(r=>setTimeout(r,2500));}}}
+  const ck='sk-ai:'+C.word+':'+strip(w);
+  try{const hit=localStorage.getItem(ck);if(hit)return JSON.parse(hit);}catch(e){}
+  const parse=t=>{const o=JSON.parse((String(t).match(/\{[\s\S]*\}/)||[''])[0]);
+    return{real:!!o.real,rank:Math.max(2,Math.round(Math.pow(1-Math.min(99,+o.score||0)/100,1.8)*V.length)),hint:String(o.hint||'').slice(0,80)};};
+  const racers=[];
+  if(window.fbAsk)racers.push(withTO(window.fbAsk(P),7000).then(parse));
   else window.lastAIError='Firebase AI se nenačetla'+(window.fbErr?' ('+window.fbErr+')':'')+'.';
-  if(t==null){
-    try{
-      const res=await withTO(fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:P}]})}),8000);
-      const d=await res.json();t=d.content.map(i=>i.text||'').join('');
-    }catch(err){window.lastAIError=(window.lastAIError||'')+' | Claude API nedostupné.';return null;}
-  }
+  racers.push(withTO(fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-5-5",max_tokens:150,messages:[{role:"user",content:P}]})}),7000)
+    .then(r=>r.json()).then(d=>parse(d.content.map(i=>i.text||'').join(''))));
   try{
-    const o=JSON.parse((String(t).match(/\{[\s\S]*\}/)||[''])[0]);
-    return{real:!!o.real,rank:Math.max(2,Math.round(Math.pow(1-Math.min(99,+o.score||0)/100,1.8)*V.length)),hint:String(o.hint||'').slice(0,80)};
-  }catch(err){return null;}
+    const r=await Promise.any(racers);
+    try{localStorage.setItem(ck,JSON.stringify(r));}catch(e){}
+    return r;
+  }catch(err){window.lastAIError=(err.errors||[err]).map(e=>e&&e.message||e).join(' | ');return null;}
 }
 async function submit(e){
   if(e)e.preventDefault();
@@ -748,7 +749,7 @@ async function submit(e){
   if(!k)return;
   if(C.st.g.indexOf(k)>=0){setMsg('Tohle už jsi zkoušel.',1800);return;}
   if(!VI[k]){
-    busyAI=true;setMsg('Královský písař listuje slovníkem…');
+    busyAI=true;setMsg('Písař listuje slovníkem…');
     const r=await askAI(C,raw);busyAI=false;
     if(cur!==C)return;
     if(!r){setMsg(/debug/.test(location.search)?'Důvod: '+String(window.lastAIError||'neznámý').slice(0,260):'Písař má právě plné ruce. Zkus to za chvilku nebo napiš jiné slovo.',6000);return;}
@@ -828,7 +829,7 @@ try{
     appId:"1:413826357424:web:a28f55d792ef13c3c3c375"
   });
   const ai=getAI(app,{backend:new GoogleAIBackend()});
-  const model=getGenerativeModel(ai,{model:"gemini-3.8-flash",generationConfig:{responseMimeType:"application/json"}});
+  const model=getGenerativeModel(ai,{model:"gemini-3.8-flash",generationConfig:{responseMimeType:"application/json",maxOutputTokens:150,temperature:0.2}});
   window.fbAsk=async p=>{const r=await model.generateContent(p);return r.response.text();};
 }catch(e){window.fbErr=String(e&&e.message||e).slice(0,120);console.warn('Firebase AI se nenačetla:',e);}
 </script>
