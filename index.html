@@ -917,6 +917,7 @@ async function askAI(C,w){
   try{const hit=localStorage.getItem(ck);if(hit)return JSON.parse(hit);}catch(e){}
   const parse=t=>{const o=JSON.parse((String(t).match(/\{[\s\S]*\}/)||[''])[0]);
     return{real:!!o.real,rank:Math.max(2,Math.round(Math.pow(1-Math.min(99,+o.score||0)/100,1.8)*V.length)),hint:String(o.hint||'').slice(0,80)};};
+  if(Date.now()<(window.aiCool||0)){window.lastAIError='429 limit, pauza';return null;}
   const racers=[];
   if(window.fbAsk)racers.push(withTO(window.fbAsk(P),7000).then(parse));
   else window.lastAIError='Firebase AI se nenačetla'+(window.fbErr?' ('+window.fbErr+')':'')+'.';
@@ -926,7 +927,7 @@ async function askAI(C,w){
     const r=await Promise.any(racers);
     try{localStorage.setItem(ck,JSON.stringify(r));}catch(e){}
     return r;
-  }catch(err){window.lastAIError=(err.errors||[err]).map(e=>e&&e.message||e).join(' | ');return null;}
+  }catch(err){window.lastAIError=(err.errors||[err]).map(e=>e&&e.message||e).join(' | ');if(/429|quota|exceeded/i.test(window.lastAIError))window.aiCool=Date.now()+60000;return null;}
 }
 async function submit(e){
   if(e)e.preventDefault();
@@ -951,7 +952,7 @@ async function submit(e){
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
   C.st.g.push(k);gi.value='';setMsg('');
-  if(aiFail){const er=String(window.lastAIError||'neznámá chyba').slice(0,160);console.warn('AI hodnocení selhalo:',er);setMsg('AI neodpověděla: '+er,9000);}
+  if(aiFail){const er=String(window.lastAIError||'neznámá chyba');console.warn('AI hodnocení selhalo:',er);setMsg(/429|quota|exceeded/i.test(er)?'AI má vyčerpaný limit dotazů, zkus to za chvíli. Zatím je to hrubý odhad.':'AI neodpověděla: '+er.slice(0,160),9000);}
   if(k===C.word){C.st.done=true;C.st.won=true;S.won++;if(C.mode==='daily')S.daily=(S.daily||0)+1;if(C.mode==='royal'){S.extra=(S.extra||0)+2;S.royalN=(S.royalN||0)+1;}markStreak();}
   save();renderGuesses();renderAll();showResult();
   if(k===C.word&&stageVisible())startGrow();
