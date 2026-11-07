@@ -896,9 +896,11 @@ function renderGuesses(){
 }
 let busyAI=false;
 /* ohnuté tvary slov ze slovníku (hradu, mobilu…): vezmeme blízký slovníkový tvar a jeho blízkost k tajnému slovu */
-function stemFind(k){let best=null,bl=0;
-  for(const o of V){const a=o.k,n=Math.min(a.length,k.length);let i=0;while(i<n&&a[i]===k[i])i++;
-    if(i>=4&&i>=n-2&&Math.abs(a.length-k.length)<=3&&i>bl){bl=i;best=a;}}
+function stemFind(k){const EN=['','u','a','e','i','y','em','ou','ovi','ech','ach','ami','ům','um','ě'];let best=null,bl=0;
+  for(const o of V){const a=o.k;let i=0;const n=Math.min(a.length,k.length);while(i<n&&a[i]===k[i])i++;
+    if(i<4||a.length-i>1||i<=bl)continue;
+    if(EN.indexOf(k.slice(i).toLowerCase())<0)continue;
+    bl=i;best=a;}
   return best;}
 const withTO=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Časový limit '+ms/1000+' s, Firebase neodpověděl')),ms))]);
 async function askAI(C,w){
@@ -929,17 +931,19 @@ async function submit(e){
   if(!VI[k]){
     /* slovo mimo slovník: hned ho přijmeme jako velmi vzdálené, bez čekání na AI */
     if(!/^[a-zA-Z\u00C0-\u017F]{2,24}$/.test(raw)){setMsg('Tohle není slovo.',2000);return;}
-    let r=null;
+    let r=null,aiFail=false;
     if(USE_AI){
       busyAI=true;setMsg('Písař listuje slovníkem…');
       r=await askAI(C,raw);busyAI=false;
       if(cur!==C)return;
       if(r&&!r.real){setMsg('Tohle není české slovo.',2400);return;}
     }
-    if(!r){const sf=stemFind(k);r={real:true,rank:sf&&C.rk[sf]?Math.max(2,C.rk[sf]):Math.round(V.length*.9),hint:''};}
+    if(!r){const sf=stemFind(k);aiFail=USE_AI&&!sf;
+      r={real:true,rank:sf&&C.rk[sf]?Math.max(2,C.rk[sf]):Math.round(V.length*.9),hint:aiFail?'AI nedostupná, hrubý odhad.':''};}
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
   C.st.g.push(k);gi.value='';setMsg('');
+  if(aiFail){const er=String(window.lastAIError||'neznámá chyba').slice(0,160);console.warn('AI hodnocení selhalo:',er);setMsg('AI neodpověděla: '+er,9000);}
   if(k===C.word){C.st.done=true;C.st.won=true;S.won++;if(C.mode==='daily')S.daily=(S.daily||0)+1;if(C.mode==='royal'){S.extra=(S.extra||0)+2;S.royalN=(S.royalN||0)+1;}markStreak();}
   save();renderGuesses();renderAll();showResult();
   if(k===C.word&&stageVisible())startGrow();
