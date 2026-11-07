@@ -722,20 +722,21 @@ function renderGuesses(){
 }
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let busyAI=false;
+const withTO=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('Časový limit '+ms/1000+' s, Firebase neodpověděl')),ms))]);
 async function askAI(C,w){
-  const P='Hra na hádání slov. Tajné slovo: "'+C.full+'". Hráčův tip: "'+w.slice(0,40)+'". Odpověz POUZE JSON bez dalšího textu: {"real":true nebo false (je tip skutečné české slovo, i ohnuté),"score":0-100 (sémantická blízkost k tajnému slovu; 100 jen pro totéž slovo, běžná slova bez vztahu 0-15),"hint":"nejvýše 8 českých slov, středověká nápověda, která tajné slovo neprozradí"}';
+  const P='Hra na hádání slov. Tajné slovo: "'+C.full+'". Hráčův tip: "'+w.slice(0,40)+'". Buď přísný: slova jen z podobného oboru dej 15-35, opravdu blízká 40-70, téměř synonyma 71-95. Odpověz POUZE JSON bez dalšího textu: {"real":true nebo false (je tip skutečné české slovo, i ohnuté),"score":0-100 (sémantická blízkost k tajnému slovu; 100 jen pro totéž slovo, běžná slova bez vztahu 0-15),"hint":"nejvýše 8 českých slov, vtipná středověká poznámka k SAMOTNÉMU tipu (ne k tajnému slovu); nesmí obsahovat tajné slovo, jeho synonyma ani žádnou informaci o něm"}';
   let t=null;
   window.lastAIError='';
-  if(window.fbAsk){try{t=await window.fbAsk(P);}catch(err){console.warn('Firebase AI:',err);window.lastAIError='Firebase: '+(err&&err.message||err);}}
+  if(window.fbAsk){for(let a=0;a<2&&t==null;a++){try{t=await withTO(window.fbAsk(P),20000);}catch(err){console.warn('Firebase AI:',err);window.lastAIError='Firebase: '+(err&&err.message||err);if(a<1)await new Promise(r=>setTimeout(r,2500));}}}
   else window.lastAIError='Firebase AI se nenačetla'+(window.fbErr?' ('+window.fbErr+')':'')+'.';
   if(t==null){
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:P}]})});
+      const res=await withTO(fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:P}]})}),8000);
       const d=await res.json();t=d.content.map(i=>i.text||'').join('');
     }catch(err){window.lastAIError=(window.lastAIError||'')+' | Claude API nedostupné.';return null;}
   }
   try{
-    const o=JSON.parse(String(t).replace(/```json|```/g,'').trim());
+    const o=JSON.parse((String(t).match(/\{[\s\S]*\}/)||[''])[0]);
     return{real:!!o.real,rank:Math.max(2,Math.round(Math.pow(1-Math.min(99,+o.score||0)/100,1.8)*V.length)),hint:String(o.hint||'').slice(0,80)};
   }catch(err){return null;}
 }
@@ -750,7 +751,7 @@ async function submit(e){
     busyAI=true;setMsg('Královský písař listuje slovníkem…');
     const r=await askAI(C,raw);busyAI=false;
     if(cur!==C)return;
-    if(!r){setMsg('Tohle slovo neznám a písař neodpovídá. Důvod: '+String(window.lastAIError||'neznámý').slice(0,260),12000);return;}
+    if(!r){setMsg(/debug/.test(location.search)?'Důvod: '+String(window.lastAIError||'neznámý').slice(0,260):'Písař má právě plné ruce. Zkus to za chvilku nebo napiš jiné slovo.',6000);return;}
     if(!r.real){setMsg('Tohle není české slovo.',2400);return;}
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
