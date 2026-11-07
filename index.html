@@ -291,12 +291,29 @@ h1{animation:glow 5s ease-in-out infinite}
 'use strict';
 const MULT=31;
 const USE_AI=false;                /* true = neznámá slova hodnotí AI (pomalejší), false = hned nízká úroveň */
-const EXTRA_WORDS=true;           /* false = jen jedno slovo denně, bez extra slov */
+const ROYAL_MAX=50;const EXTRA_WORDS=true;           /* false = jen jedno slovo denně, bez extra slov */
 const KEY='slovni-kralovstvi-v1';
 const reduce=!!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 const $=id=>document.getElementById(id);
 const strip=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
 
+/* ---------- zvuky (WebAudio, žádné soubory) ---------- */
+let sndOn=true;try{sndOn=localStorage.getItem('sk-snd')!=='0';}catch(e){}
+let AC=null;
+function snd(type,r){
+  if(!sndOn)return;
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume();
+    const t=AC.currentTime;
+    const note=(f,t0,dur,vol,wf)=>{const o=AC.createOscillator(),g=AC.createGain();o.type=wf||'square';o.frequency.setValueAtTime(f,t+t0);
+      g.gain.setValueAtTime(.0001,t+t0);g.gain.exponentialRampToValueAtTime(vol||.05,t+t0+.01);g.gain.exponentialRampToValueAtTime(.0001,t+t0+dur);
+      o.connect(g);g.connect(AC.destination);o.start(t+t0);o.stop(t+t0+dur+.02);};
+    if(type==='tick'){const p=Math.max(0,Math.min(1,1-Math.log(r||2)/Math.log(1500)));note(180+p*520,0,.09,.04,'triangle');}
+    else if(type==='win'){[523,659,784,1047].forEach((f,i)=>note(f,i*.1,.18,.05));}
+    else if(type==='grow'){for(let i=0;i<6;i++)note(220*Math.pow(1.122,i*2),i*.08,.12,.04,'triangle');}
+    else if(type==='reward'){[784,988,1175,1568].forEach((f,i)=>note(f,i*.12,.25,.05,'triangle'));}
+  }catch(e){}
+}
 /* ---------- uložený stav ---------- */
 const FH=12, VW=144, VH=144, CX=106, ROOF=46, GROUND=34;   /* výška patra, velikost výřezu, střed věže */
 function fresh(){return{v:3,won:0,extra:0,royalN:0,daily:0,seenN:0,streak:{n:0,last:null,best:0},day:null,bonus:null};}
@@ -335,6 +352,8 @@ const LM=[{k:'kostel',n:'kostel',m:20,x:22,col:'#8a7aa8',al:.85},{k:'petrin',n:'
   {k:'eiffel',n:'Eiffelova věž',m:330,x:34,col:'#6a6290',al:.55},{k:'burj',n:'Burdž Chalífa',m:828,x:62,col:'#6f6a9a',al:.5},
   {k:'snezka',n:'Sněžka',m:1603,x:20,col:'#6a6a90',al:.38},{k:'everest',n:'Mount Everest',m:8849,x:0,col:'#fff',al:0}];
 
+/* odměny za počet uhodnutých slov */
+const RW=[{n:10,t:'sudy a bedny před branou'},{n:25,t:'horkovzdušný balón'},{n:50,t:'drak krouží nad věží'},{n:100,t:'ohňostroj nad hradem'}];
 /* ---------- pomocné kreslení ---------- */
 const canvasEl=$('scene');let ctx=null,c=null,T=0;
 function px(x,y,w,h,col){c.fillStyle=col;c.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));}
@@ -700,8 +719,34 @@ function vignette(){
   c.fillStyle=VG;c.fillRect(0,0,VW,VH);
 }
 
+/* odměny: sudy, balón, drak, ohňostroj */
+function barrels(base){
+  [[80,3],[87,4]].forEach(a=>{const x=a[0],y=base+a[1];px(x-3,y-6,7,7,'#7a4a2b');px(x-3,y-6,1,7,'#a8693a');px(x+3,y-6,1,7,'#4f2f1c');
+    px(x-3,y-4,7,1,'#2b2430');px(x-3,y-1,7,1,'#2b2430');px(x-2,y-7,5,1,'#4f2f1c');});
+  px(72,base+3,6,6,'#a8693a');px(72,base+3,6,1,'#c9a063');px(72,base+6,6,1,'#6a4528');px(74,base+3,1,6,'#6a4528');shade(72,base+8,6,1,.3);
+}
+function balloon(base){
+  const x=Math.round(((T*2.5)%(VW+50))-25),y=Math.round(base-70+Math.sin(T*.7)*3);
+  disc(x,y,7,'#c25a4c');px(x-1,y-6,2,12,'#efe3cc');lite(x-6,y-3,2,4,.3);shade(x+3,y-2,3,6,.2);
+  px(x-4,y+6,1,3,'#4a3224');px(x+4,y+6,1,3,'#4a3224');px(x-3,y+9,7,4,'#6a4528');px(x-3,y+9,7,1,'#8b5a33');
+}
+function dragon(roofBase){
+  const a=T*.45,x=Math.round(CX+Math.cos(a)*36),y=Math.round(roofBase-18+Math.sin(a*2)*7),dir=-Math.sin(a)>=0?1:-1,fl=Math.floor(T*6)%2,g='#5d9e47',gd='#3f7a3a',w='#7a4cb8';
+  px(x-4,y,8,3,g);px(x-4,y+2,8,1,gd);
+  px(x+dir*4-1,y-1,3,3,g);px(x+dir*5,y,1,1,'#2b2430');
+  px(x-dir*5-1,y+1,3,1,g);px(x-dir*8-1,y+2,3,1,gd);
+  if(fl){px(x-1,y-5,3,5,w);px(x-3,y-3,2,3,w);}else{px(x-1,y+3,3,4,w);px(x-3,y+3,2,2,w);}
+  if(Math.sin(T*1.3)>.85)for(let k=0;k<3;k++)px(x+dir*(7+k*2),y+(k&1),2,1,k?'#e8641c':'#f2c14e');
+}
+function fireworks(roofBase){
+  const id=Math.floor(T/2.6),p=(T%2.6)/2.6;if(p>.8)return;
+  const cx=Math.round(40+hh(id,70)*70),cy=Math.max(14,Math.min(VH-70,Math.round(roofBase-30-hh(id,71)*22))),cols=['#ff7ab0','#ffd34d','#8dffc4','#6fe0ff','#ffffff'],col=cols[(hh(id,72)*5)|0];
+  const q=p/.8,r=q*16;
+  for(let k=0;k<16;k++){const ang=k/16*6.283;c.globalAlpha=1-q*q;px(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r+q*q*7,1,1,col);if(k%2)px(cx+Math.cos(ang)*r*.6,cy+Math.sin(ang)*r*.6+q*q*5,1,1,'#fff');}
+  c.globalAlpha=1;
+}
 /* ---------- celá scéna ---------- */
-let scaleNow=1,curHM=5,curRoyal=0,curGrow=false;
+let scaleNow=1,curHM=5,curRoyal=0,curGrow=false,curN=0;
 function drawScene(now,D){
   if(!D&&(!ctx||!stageEl.clientWidth))return;
   c=D?D.ctx:ctx;c.imageSmoothingEnabled=false;c.globalAlpha=1;c.globalCompositeOperation='source-over';T=now;
@@ -709,7 +754,7 @@ function drawScene(now,D){
   const Ff=1+(D?D.disp:ui.disp),fl=Math.floor(Ff),frac=Ff-fl,Apex=Ff*FH+ROOF,total=Apex+GROUND,P=Math.max(0,VH-total);
   const camY=D?0:Math.min(Math.max(0,stageEl.scrollTop/(scaleNow||1)),Math.max(0,total-VH));
   const base=Math.round(Apex+P-camY),sn=D?D.sn:streakNow(),F=D?Math.floor(Ff):1+nWords();
-  curHM=D?Math.round(5*(1+Math.floor(D.disp+1e-6))):heightM();curRoyal=D?D.royal:(S.royalN||0);curGrow=D?D.grow:!!ui.grow;
+  curHM=D?Math.round(5*(1+Math.floor(D.disp+1e-6))):heightM();curRoyal=D?D.royal:(S.royalN||0);curGrow=D?D.grow:!!ui.grow;curN=D?0:nWords();
   /* obloha podle výšky a denní doby */
   for(let y=0;y<VH;y+=2)px(0,y,VW,2,skyAt((base-y-1)/FH*5));
   /* hvězdy */
@@ -732,6 +777,7 @@ function drawScene(now,D){
   /* orientační body */
   const topW=floorW(Math.max(0,(frac>0?fl:fl-1)));
   landmarks(base,CX-(topW>>1));
+  if(curN>=25)balloon(base);
   /* země */
   if(base<VH)ground(base,F,sn);
   /* věž */
@@ -741,9 +787,10 @@ function drawScene(now,D){
     if(j===fl&&frac>0){partial=true;c.save();c.beginPath();c.rect(0,base-Ff*FH,VW,FH);c.clip();drawFloor(j,yTop);c.restore();partial=false;}
     else drawFloor(j,yTop);}
   if(base<VH+6){const w0=floorW(0);px(CX-(w0>>1)-3,base-2,w0+6,2,'#5d616b');lite(CX-(w0>>1)-3,base-2,w0+6,1,.35);px(CX-6,base-2,12,2,'#7a7f88');}
-  if(base<VH+12){frontDeco(base,sn);walkers(base,F);}
+  if(base<VH+12){frontDeco(base,sn);walkers(base,F);if(curN>=10)barrels(base);}
   const roofBase=base-Ff*FH,jt=frac>0?fl:fl-1;
   if(roofBase<VH+30&&roofBase>-70)roofAndTop(Math.round(roofBase),Math.max(0,jt),sn);
+  if(curN>=50&&roofBase>-30&&roofBase<VH+30)dragon(roofBase);
   if(curGrow){c.globalAlpha=.6;for(let k=0;k<6;k++){const a=k*1.1+T*3;px(CX+Math.cos(a)*(14+k*2),roofBase-2+Math.sin(a*1.7)*3,2,2,'#efe3cc');}c.globalAlpha=1;}
   /* barevné ladění a světla */
   grade();
@@ -751,6 +798,7 @@ function drawScene(now,D){
   critters(base);
   /* záře kolem věže za sérii 30+ */
   if(sn>=30)for(let k=0;k<14;k++){const y=((T*10+k*29)%VH),x=CX+(k%2?1:-1)*(17+(k%3)*5+Math.sin(T+k)*2);c.globalAlpha=.7;px(x,VH-y,2,2,'#f2d070');c.globalAlpha=1;}
+  if(curN>=100)fireworks(roofBase);
   vignette();
   /* pravítko výšky vlevo */
   c.globalAlpha=.42;px(0,0,18,VH,'#0a0814');c.globalAlpha=1;
@@ -788,7 +836,7 @@ function startGrow(){
   if(ui.disp>=N-1e-6){if(S.seenN!==N){S.seenN=N;save();}return;}
   if(reduce){ui.disp=N;S.seenN=N;save();layout();renderPanel();redraw();return;}
   stageEl.scrollTop=0;
-  ui.grow={from:ui.disp,to:N,t0:performance.now(),dur:Math.min(3000,700+(N-ui.disp)*600)};
+  ui.grow={from:ui.disp,to:N,t0:performance.now(),dur:Math.min(3000,700+(N-ui.disp)*600)};snd('grow');
 }
 function stageVisible(){const r=stageEl.getBoundingClientRect();return r.top<innerHeight*.7&&r.bottom>innerHeight*.3;}
 function renderStats(){
@@ -812,7 +860,9 @@ function renderPanel(){
     (nr?' Další odměna za '+nr+' '+cz(nr,'den','dny','dní')+': '+R[nr]+'.':' Máš všechny odměny za sérii.')+(best>sn?' Rekord: '+best+'.':'')+'</p>';
   const r=Math.min(S.royalN||0,5),RT=['zlatý hrot','dvě věžičky','drak na střeše','křišťálová koule','zlatá svatozář'];
   let d='<b>Královské trofeje: '+r+' z 5</b><p class="lead">Královské slovo (jednou týdně) přidá hradu 3 patra a novou zlatou ozdobu.'+(r?' Máš: '+RT.slice(0,r).join(', ')+'.':'')+'</p>';
-  panelEl.innerHTML='<div class="pgrid"><div class="pb">'+a+'</div><div class="pb">'+b+'</div><div class="pb">'+d+'</div></div>';
+  const rwHave=RW.filter(r=>r.n<=N),rwNext=RW.find(r=>r.n>N);
+  const e='<b>Odměny za slova: '+rwHave.length+' z '+RW.length+'</b><p class="lead">'+(rwNext?'Další za '+rwNext.n+' slov: '+rwNext.t+'. Chybí ti '+(rwNext.n-N)+' '+cz(rwNext.n-N,'slovo','slova','slov')+'.':'Máš všechny odměny.')+(rwHave.length?' Máš: '+rwHave.map(r=>r.t).join(', ')+'.':'')+'</p>';
+  panelEl.innerHTML='<div class="pgrid"><div class="pb">'+a+'</div><div class="pb">'+b+'</div><div class="pb">'+d+'</div><div class="pb">'+e+'</div></div>';
 }
 function renderAll(){renderStats();renderProg();renderPanel();layout();redraw();}
 function initCastle(){
@@ -874,8 +924,25 @@ const sim=(a,b)=>a.v.reduce((s,x,i)=>s+x*b.m[i],0)/(a.nr*b.nr);
 const hj=s=>{let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%997;return h/997;};
 const SEC=SECRET.map(strip).filter(k=>VI[k]);
 const ROY='svoboda spravedlnost pravda moudrost osud svědomí tajemství stín paměť dědictví rovnováha smysl pokora'.split(' ').map(strip).filter(k=>VI[k]);
-const wordIndexFor=dn=>((dn*MULT)%SEC.length+SEC.length)%SEC.length;
+const gcd=(a,b)=>b?gcd(b,a%b):a;
+const MUL=(()=>{let m=MULT;while(gcd(m,SEC.length)!==1)m++;return m;})();
+const wordIndexFor=dn=>((dn*MUL)%SEC.length+SEC.length)%SEC.length;
 const NR={král:"královna trůn koruna princ princezna panovník vladař žezlo císař dvůr dvořan kníže vévoda hrad palác poddaný šlechtic rytíř císařovna dynastie korunovace zeměpán regent vláda dědic následník monarcha královský",královna:"král princezna koruna trůn princ dvůr panovník paní dvořan hrad palác žezlo kníže císařovna manželka svatba šlechtična komorná dvořanka korunovace dědic vládkyně šaty klenot",princ:"princezna král královna rytíř hrad kůň koruna trůn dědic následník kníže vévoda dvůr meč šlechtic zámek pohádka drak svatba ženich mládenec palác dvořan panovník",princezna:"princ královna král hrad věž drak pohádka koruna šaty zámek dcera dívka nevěsta rytíř víla trůn zlato zrcadlo kouzlo palác dvůr svatba šlechtična klenot",kníže:"král princ vévoda hrabě šlechtic pán panovník vladař trůn dvůr hrad zámek koruna baron rytíř dědic kancléř markrabě poddaný panství vojevůdce zeměpán císař šlechta aristokrat",trůn:"král koruna královna žezlo vladař panovník dvůr císař sál hrad komnata moc vláda dědic dynastie princ kníže korunovace zlato křeslo palác regent monarcha purpur dvořan",koruna:"král královna trůn žezlo zlato drahokam diamant klenot šperk vladař princ princezna panovník císař moc rubín perla dvůr bohatství hlava smaragd safír korunovace poklad",žezlo:"král koruna trůn vladař panovník moc císař královna zlato klenot hůl vláda dvůr symbol korunovace princ dynastie monarcha regent zeměpán zlatý drahokam sál",rytíř:"meč štít brnění kůň helma kopí hrad turnaj zbroj válka bitva odvaha čest král armáda zbraň souboj oštěp voják boj válečník kopiník princezna drak erb věrnost",meč:"rytíř štít dýka kopí zbraň čepel brnění bitva šavle kord boj válka kovář ocel železo helma luk válečník souboj pochva oštěp rukojeť voják zbroj",štít:"meč rytíř brnění helma kopí obrana zbroj bitva zbraň válka voják erb ochrana kovář ocel dýka boj souboj pancíř oštěp turnaj kůň",kopí:"oštěp meč štít luk šíp zbraň rytíř kopiník střela bitva lov válka voják kůň brnění helma turnaj dýka halapartna sekera prak katapult",luk:"šíp kuše střelec kopí zbraň lovec tětiva meč štít lov les voják bitva oštěp terč střela rytíř hrad kopiník dýka halapartna",šíp:"luk kuše střelec tětiva zbraň lovec kopí střela bitva terč les oštěp meč lov voják štít dýka hrad rytíř kopiník",helma:"brnění štít meč rytíř zbroj hlava ochrana kovář bitva voják pancíř ocel železo kopí turnaj hrad erb dýka boj zbraň",brnění:"helma štít meč rytíř zbroj pancíř kov ocel železo kovář bitva turnaj kopí zbraň voják ochrana válka erb dýka",hrad:"zámek věž tvrz hradba brána příkop pevnost most král rytíř palác citadela bašta opevnění nádvoří komnata trůn město sklep žalář vězení obléhání kobka",věž:"hrad hradba zvonice zámek brána pevnost okno schody tvrz hlídka bašta strážní cimbuří střecha hodiny komín vrchol výška kostel katedrála maják",brána:"hrad hradba věž most příkop vrata zámek vchod mříž pevnost město stráž dveře zeď ulice vjezd opevnění cesta",hradba:"hrad věž brána příkop pevnost zeď opevnění obrana město obléhání bašta cimbuří stráž zámek tvrz most kámen citadela útok nepřítel vojsko",příkop:"hrad hradba most voda brána obrana zeď pevnost opevnění zámek tvrz věž stráž louže řeka bahno žába město hloubka útok",most:"příkop hrad řeka brána cesta lávka přechod hradba voda břeh brod loď oblouk kámen pilíř silnice stezka vesnice město pevnost zámek",mlýn:"mlynář mouka obilí řeka kolo pekař chléb pole voda zrno žernov sedlák vesnice potok kámen pytel žito pšenice vítr jez splav",studna:"voda vědro pramen kámen vesnice hrad žízeň hloubka dvůr řetěz kolo déšť potok řeka rybník nádvoří žába dno nebe pít",kovář:"kovárna železo kladivo kovadlina meč pec oheň ocel hřebík podkova kování výheň měch kleště zbrojíř řemeslník zbraň kůň štít brnění uhlí řemeslo žár",kovárna:"kovář kladivo železo kovadlina oheň pec meč ocel výheň měch kování kleště podkova hřebík zbrojíř uhlí řemeslník žár dílna jiskra",zlato:"stříbro poklad mince klenot bohatství drahokam koruna truhla zlatník peníze šperk diamant perla prsten cenný drahý lesk žlutý kov měď zlatý skrýš pirát drak",železo:"ocel kov kovář meč ruda kovárna hřebík brnění důl kladivo rez štít kopí zbraň pec uhlí horník slitina měď bronz olovo",mince:"peníze zlato stříbro peněženka obchod trh zlatník měď bohatství platba kupec cena pokladna dukát groš koruna pokladnice mzda poklad truhla úplatek",pole:"obilí pluh sedlák žně louka seno úroda mez zahrada orba setí zrno žito pšenice farmář statek traktor vesnice les rolník hnůj",obilí:"pole mouka chléb žně sedlák mlýn zrno pšenice klas žito ječmen oves sklizeň úroda stodola sláma orba kukuřice pekař seno",chléb:"mouka pekař obilí mlýn pec máslo jídlo hostina sýr rohlík bulka koláč buchta snídaně oběd večeře sůl stůl pekárna hlad kuchyně",pivo:"hospoda chmel sud pohár víno hostina hospodský džbán hostinec číše medovina rum opilec žízeň pěna ječmen slad pít nápoj číšník",víno:"hrozny pohár hostina pivo sud vinice číše džbán nápoj opilec láhev medovina hospoda sklep sklenice červené bílé chuť pít",hostina:"jídlo víno pivo stůl kuchař král oslava tanec hudba svatba pozvání pečeně sál host talíř číše pohár zpěv kuchyně dort",kůň:"jezdec sedlo kopyto jezdit rytíř hříbě stáj podkova koňský ohrada pastvina sláma seno klus cval vozka kočár povoz kovář zvíře kobyla hřebec",vlk:"smečka les liška pes zvíře šelma vytí tlapa dravec medvěd noc měsíc jelen ovce lov hlad zub pastýř kožešina chlupatý vlčák",medvěd:"les med zvíře šelma vlk dravec tlapa kožešina jeskyně zima spánek ryba chlupatý brloh drápy hnědý lov kmen liška jelen",drak:"oheň ještěr zlato poklad rytíř princezna křídla netvor jeskyně plameny šupiny ocas drápy příšera pohádka bestie obr hrad kouzlo plamen čaroděj",sokol:"orel pták dravec křídla lov jestřáb výr káně luňák peří hnízdo vzduch let zobák rytíř lovec vysoko pařát obloha vrána",orel:"sokol pták dravec křídla jestřáb luňák káně výr peří hnízdo vzduch let zobák pařát hora obloha vysoko skála symbol král lov",řeka:"potok voda břeh most loď rybář ryba proud jezero rybník pramen moře ústí tok vlna brod mlýn pláň údolí povodeň splav pobřeží",les:"strom dub lípa mýtina houba zvěř lovec stezka kmen větev jelen vlk medvěd mech kapradí jehličí háj bor křoví hora potok stín zvíře",hora:"kopec skála vrch údolí vrchol sníh strmý jeskyně stezka hřeben průsmyk les lom kámen výška pahorek planina horník potok orel",strom:"les dub lípa větev kmen list kořen koruna jabloň smrk buk bříza jedle zahrada ovoce stín listí pařez sad sekyra borovice hrušeň",oheň:"plamen jiskra žár kouř popel dřevo hořet uhlí táborák pochodeň hranice požár svíčka světlo teplo spálit krb žhavý sopka kovárna",bouře:"blesk hrom déšť vítr mrak vichřice průtrž noc voda loď vlny bouřka povodeň záplava hřmění tma oblačno krupobití",kniha:"svitek pergamen pero písmo kronika list román příběh knihovna autor čtenář stránka kapitola básník inkoust papír mnich zákon slovník deník psát",svitek:"pergamen kniha pero písmo kronika listina písař mnich zákon smlouva papír inkoust pečeť dopis nápis zpráva archiv stránka kouzlo text",pečeť:"vosk listina svitek dopis smlouva znak král razítko podpis zákon dokument pergamen písař erb zapečetit tajemství zpráva signet kříž prsten",zákon:"soud právo řád trest sudí soudce král povinnost pravidlo spravedlnost kniha vězení kat zločin vina obžaloba svitek hřích přísaha pořádek vyhláška",trh:"kupec obchod zboží prodavač cena stánek tržiště peníze mince náměstí jarmark nákup prodej směna kořist krám tlačenice sleva zlato",kupec:"obchod trh zboží cena peníze mince karavana prodej nákup obchodník tržiště směna zlato cesta zisk velbloud koření vůz poklad cizina",poklad:"zlato truhla klenot drahokam mince pirát skrýš mapa drak diamant stříbro bohatství perla koruna ostrov jeskyně lupič zakopat šperk rubín kořist",zloděj:"lupič kapsář krást ukradnout noc poklad vězení stráž kat trest zlato mince bandita lotr tulák žalář zločin prsten stín lup loupež",mnich:"klášter modlitba kněz opat kaple kniha svitek kutna kříž bůh víra ticho zvon písař kostel jeptiška biskup zpověď pivo pokora cela papež",šašek:"kejklíř dvůr král smích žert čepice rolničky šaškovat komediant vtip zábava bavič kostým maska tanec hostina trůn cirkus herec hlupák",čaroděj:"kouzlo hůl magie kouzelník čarodějka lektvar elixír věž kniha mág zaklínač vlkodlak drak duch pohádka alchymista runa zaklínadlo amulet bylina",kouzlo:"čaroděj magie hůl čáry zaklínadlo lektvar elixír víla kouzelník kletba talisman amulet runa přízrak pohádka duch drak příšera zázrak čarodějka mág",víla:"kouzlo les pohádka křídla magie elf lesní motýl tanec jezero kouzelná louka květ svit mlha princezna čarodějka rusalka stezka",trpaslík:"skřítek hora důl zlato kladivo trpasličí pohádka kovář jeskyně sekyra krátký vous elf obr šperk kámen klenot poklad čepice skřet horník",harfa:"struny hudba píseň bard zpěv nástroj tón melodie anděl zvuk loutna flétna housle trubka koncert hudebník struna tanec drnkat hrát zpěvák",píseň:"zpěv hudba melodie text bard zpěvák nota tón refrén harfa loutna tanec zpívat hymna ukolébavka koncert hudebník skladba rytmus verš",tanec:"hudba píseň rej bál pár kroky taneční zpěv svatba radost hostina muzikant bubny flétna šašek oslava pohyb sál dudy kolo rytmus párty",láska:"srdce polibek vášeň objetí něha věrnost city touha přátelství manželství nevěsta ženich růže slza radost pár princezna svatba cit zamilovaný",odvaha:"statečnost hrdina strach rytíř hrdinství čest síla srdnatost bojovník válka bitva dobrodruh vítězství hrdinný nebojácný sebevědomí vůle překonat nebezpečí",čest:"věrnost odvaha rytíř slovo hrdost sláva přísaha poctivost svědomí pověst jméno stud pokora hrdinství důstojnost úcta zásada vznešený",zrada:"zrádce lež úklad spiknutí zrazen věrnost podvod nepřítel vražda dýka vina trest kat spiklenec zloba smrt intrika vzpoura pomsta strach nevěra"};
+Object.assign(NR,{
+svoboda:"volnost nezávislost svobodný osvobození sloboda otroctví vězení řetězy pouta nesvoboda volný svobodně bezpráví demokracie práva spravedlnost nezávislý osvobodit útlak útisk vzpoura odboj revoluce hranice odvaha vůle právo vlast volba poddaný otrok vězeň klec ptáče křídla let mír rovnost bratrství důstojnost svědomí",
+spravedlnost:"spravedlivý spravedlivost nespravedlnost nespravedlivý právo zákon soud soudce soudit férovost férový rovnost pravda trest odplata vina nevinnost nevinný sudí váha váhy meč rovnováha čest poctivost svědomí pomsta odškodnění viník obžaloba obhajoba svědek přísaha spor rozsudek vězení kat zločin morálka mravnost řád povinnost moc král vláda",
+pravda:"pravdivý pravdivost lež nepravda klam podvod důvěra skutečnost realita fakt důkaz upřímnost poctivost čestnost čestný poznání moudrost spravedlnost svědomí svědek přísaha tajemství odhalit světlo přiznání mýtus pověst iluze omyl podezření falešný lhář pravý opravdu věrnost víra názor",
+moudrost:"moudrý rozum rozumný chytrost chytrý mudrc rozvaha důvtip poznání znalost vědění vzdělání zkušenost stáří stařec učitel učenec filozof filosofie pravda pokora rada radit uvážlivost opatrnost mírnost vnímavost kniha knihy učení myšlenka nápad hloupost pošetilost blázen šašek hlupák sova duše vědomí",
+osud:"předurčení určení štěstí náhoda karma budoucnost věštba věštec věštkyně kletba předpověď hvězdy příčina důsledek život smrt cesta volba svoboda proroctví prorok sudba bůh bohové boží zázrak souhra tragédie dědictví minulost čas nutnost zákon dráha",
+svědomí:"vina výčitky výčitka hřích morálka mravnost mravní cit soucit lítost stud čest poctivost spravedlnost pravda pokání zpověď kajícník nevinnost nevinný trápení svědek rozum vědomí duše srdce dobro zlo ctnost dobrý povinnost hlas nitro přísaha pokora",
+tajemství:"tajemný tajný tajně záhada hádanka šifra skrytý skrýš utajení mlčenlivost mlčet ticho mlha stín temnota tma neznámo neznámý kouzlo magie pověst pověra legenda sen pravda lež klam důvěra důvěrný zpověď zamčený klíč zámek pečeť svitek truhla poklad skrývat odhalit odhalení objev",
+stín:"tma temnota šero přítmí světlo zákoutí silueta obrys přízrak duch strach noc mrak mlha záhada tajemství skrýš zákulisí slunce strom listí koruna chlad chladno temný stínový upír démon zloba zrada minulost paměť smutek",
+paměť:"vzpomínka vzpomínat pamatovat zapomnění zapomenout minulost historie dějiny kronika pomník hrob sláva odkaz dědictví tradice hlava mysl rozum myšlenka sen stáří dětství mládí čas příběh pověst legenda deník fotografie vědomí vědění učení kniha",
+dědictví:"dědic dědit odkaz poručník závěť majetek statek panství dědičný dědičnost pozůstalost potomek předek rodina rod dynastie tradice trůn koruna následník bohatství poklad hrob smrt minulost paměť pozemek dům zlato titul erb jméno pověst odkazovat",
+rovnováha:"vyvážení vyvážený stabilita stabilní harmonie harmonický souměrnost souměrný střed střední míra mírnost umírněnost klid mír spravedlnost váha váhy závaží kolébání chůze lano akrobat provaz rovnost rovný pevnost postoj tělo hra rozpor kompromis dohoda smír pokora",
+smysl:"význam účel cíl důvod pochopení pochopit rozum rozumět myšlenka idea hloubka poslání povaha cit citlivost vnímání čich hmat zrak sluch chuť vědomí smyslový filozofie život existence pravda hodnota moudrost nesmysl bezesmyslnost",
+pokora:"pokorný skromnost skromný ponížení ponížený úcta úctivost uctívání ctnost soucit trpělivost trpělivý mírnost mírný poslušnost poslušný věrnost víra modlitba mnich klášter kajícník pokání hřích svědomí čest moudrost hrdost pýcha pyšný povýšenost sebevědomí vděk"
+});
 const NEAR={};Object.keys(NR).forEach(k=>{NEAR[strip(k)]=NR[k].split(" ").map(strip);});
 /* ručně vybraná nejbližší slova mají přednost (pořadí 2, 3, 4…), ostatní se řadí podle sdílených oborů */
 function rankFor(k){const s=VI[k],r={};
@@ -903,19 +970,22 @@ function pickIdx(skip){
   const i=pool[Math.floor(Math.random()*pool.length)];S.used.push(i);return i;}
 function startDaily(){
   const t=todayInfo();
-  if(!S.day||S.day.key!==t.key||!S.day.n){S.day={key:t.key,n:1,g:[],done:false,won:false,i:pickIdx(-1)};save();}
-  if(S.day.i==null){S.day.i=S.day.g.length?wordIndexFor(t.dn):pickIdx(-1);save();}
+  if(!S.day||S.day.key!==t.key||!S.day.n){S.day={key:t.key,n:1,g:[],done:false,won:false,i:wordIndexFor(t.dn),v:2};save();}
+  if(S.day.v!==2){ /* starší stav měl slovo náhodné; nově je pro všechny stejné (hotové dnešní slovo se nechá) */
+    if(!S.day.done){S.day.g=[];S.day.x={};S.day.i=wordIndexFor(t.dn);}
+    S.day.v=2;save();}
   const k=SEC[S.day.i];
   cur={mode:'daily',word:k,full:VI[k].w,st:S.day,rk:rankFor(k)};
   $('gTitle').textContent='Slovo dne';
   $('gDate').textContent=t.d.toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'long'});
   begin();
 }
-function startBonus(resume){
-  if(!resume||!S.bonus||!S.bonus.n||(!S.bonus.done&&!(S.bonus.g||[]).length)){
-    const di=S.day&&S.day.i!=null?S.day.i:-1;let i;
-    i=pickIdx(di);
-    S.bonus={i:i,n:1,g:[],done:false,won:false};save();
+function startBonus(){
+  /* extra slovo je jen jedno denně a jen po uhodnutém slovu dne */
+  if(!(S.day&&S.day.won&&S.day.key===todayKey())){startDaily();return;}
+  if(!(S.bonus&&S.bonus.n&&S.bonus.key===todayKey())){
+    const di=S.day.i!=null?S.day.i:-1;
+    S.bonus={i:pickIdx(di),n:1,g:[],done:false,won:false,key:todayKey()};save();
   }
   const k=SEC[S.bonus.i];
   cur={mode:'bonus',word:k,full:VI[k].w,st:S.bonus,rk:rankFor(k)};
@@ -929,7 +999,7 @@ function startRoyal(){
   const k=ROY[(w*7)%ROY.length];
   cur={mode:'royal',word:k,full:VI[k].w,st:S.royal,rk:rankFor(k)};
   $('gTitle').textContent='Královské slovo';
-  $('gDate').textContent='Jen jedno za týden, platí do neděle. Odměna: 3 patra a zlatá ozdoba';
+  $('gDate').textContent='Jen jedno za týden, platí do neděle. Máš '+ROYAL_MAX+' pokusů. Odměna: 3 patra a zlatá ozdoba';
   begin();
 }
 function renderModes(){const el=$('modes');el.innerHTML='';
@@ -944,7 +1014,7 @@ function renderGuesses(){
     return '<div class="gs'+(last?' last':'')+'" style="--hc:'+(r===1?'#ffd34d':h[2])+'"><div class="gw"><b>'+o.w+'</b><span>'+(r===1?'Trůn je tvůj!':h[1])+'</span></div><div class="gb"><i style="width:'+(r===1?100:pctOf(r))+'%"></i></div><p>'+(r===1?'Tohle je hledané slovo.':(cur.mode==='royal'?'':h[3]+(sh?' Společné: '+sh+'.':'')+(ai?' '+esc(ai):'')))+'</p></div>';};
   $('glast').innerHTML=g.length?card(g[g.length-1],true):'';
   $('guesses').innerHTML=g.slice(0,-1).sort((a,b)=>rk(a)-rk(b)).map(k=>card(k,false)).join('');
-  $('gCount').textContent=g.length?'Tipů: '+g.length:'Háčky psát nemusíš';
+  $('gCount').textContent=g.length?'Tipů: '+g.length+(cur.mode==='royal'?' z '+ROYAL_MAX:''):(cur.mode==='royal'?'Máš '+ROYAL_MAX+' pokusů':'Háčky psát nemusíš');
 }
 
 /* ---------- neznámá slova: ukládají se u hráče, aby šla dopsat do slovníku ---------- */
@@ -961,27 +1031,45 @@ const TUT=[
  ['Hádej tajné slovo','Každý den je ukryté jedno slovo. Napiš libovolné slovo a stiskni Hádat. Háčky psát nemusíš.'],
  ['Čím žhavěji, tím blíž','Hra hodnotí, jak blízko je tvůj tip významem k tajnému slovu, ne písmeny. Tohle jsou stupně od nejchladnějšího po nejžhavější:','scale'],
  ['Hledej souvislosti','Zkoušej slova ze stejného oboru. Pod tipem se objeví „Společné: …“, což napoví, z jakého oboru tajné slovo je. Třeba u tajného slova „meč“ bude „rytíř“ hořet a „jablko“ zmrzne.'],
- ['Postav hrad','Za každé uhodnuté slovo hrad naroste o patro (+5 m). Podívej, jak to vypadá:','demo'],
- ['Série a účet','Série dní v řadě dává odměny: pochodně, prapory, hradby. Královské slovo jednou týdně je za tři patra a po slově dne si můžeš zahrát extra slova. Postup se ukládá k tvému účtu přes Google, takže hned po návodu se přihlásíš.']
+ ['Zkus to sám','Tajné slovo je ze světa rytířů a hradů. Napiš tip a sleduj teploměr. Až ho uhodneš, hrad naroste o patro (+5 m).','try'],
+ ['Série a účet','Série dní v řadě dává odměny: pochodně, prapory, hradby. Královské slovo je jednou týdně, za tři patra a máš na něj 50 pokusů. Když uhodneš slovo dne, můžeš hádat ještě jedno extra slovo, pak je pro dnešek konec. Za počet uhodnutých slov čekají odměny: sudy, balón, drak a ohňostroj. Postup se ukládá k tvému účtu přes Google, takže hned po návodu se přihlásíš.']
 ];
 let tutEl=null;
 function tutKey(e){if(e.key==='Escape')closeTut();}
 let demoStop=null;
 function stopDemo(){if(demoStop){demoStop();demoStop=null;}}
-/* ukázka v tutoriálu: stejná scéna hradu na vlastním plátně, hrad se po „uhodnutých“ slovech staví patro po patře */
-function runDemo(cv,cap){
-  cv.width=VW;cv.height=VH;
-  const D={ctx:cv.getContext('2d'),disp:0,sn:3,royal:0,grow:false};
-  const W=['král','trůn','rytíř','meč'],N=W.length,STEP=2400,t0=performance.now();let raf=0,on=true;
-  const step=now=>{
-    if(!on)return;
-    const e=reduce?(N*STEP+STEP*.5):(now-t0),tt=e%((N+1)*STEP),k=Math.floor(tt/STEP),ph=(tt%STEP)/STEP;
-    const g=k>=N?1:cl01((ph-.4)/.4),ease=1-Math.pow(1-g,3);
-    D.disp=k>=N?N:k+ease;D.grow=k<N&&g>0&&g<1;
-    cap.textContent=k>=N?'A tak to jde dál, slovo po slovu.':ph<.4?'Hádáš: '+W[k]+'…':'Uhodnuto! +1 patro, hrad měří '+(5*(2+k))+' m.';
-    drawScene(now/1000,D);
-    if(!reduce)raf=requestAnimationFrame(step);
-  };
+/* interaktivní krok tutoriálu: hráč hádá ukázkové slovo a hrad pod ním opravdu naroste */
+function runTry(d){
+  const SW='MEC',cv=document.createElement('canvas');cv.className='demo';cv.style.maxWidth='230px';
+  cv.setAttribute('role','img');cv.setAttribute('aria-label','Hrad, který roste s uhodnutými slovy');cv.width=VW;cv.height=VH;
+  const D={ctx:cv.getContext('2d'),disp:0,sn:3,royal:0,grow:false},rk=rankFor(SW);
+  const cap=document.createElement('div');cap.className='dcap';cap.textContent='Nápověda: je to zbraň rytíře.';
+  const form=document.createElement('form');form.className='frow';form.autocomplete='off';
+  const inp=document.createElement('input');inp.className='nm';inp.maxLength=24;inp.placeholder='Zkus slovo…';inp.setAttribute('aria-label','Tvůj tip');inp.autocapitalize='off';inp.spellcheck=false;
+  const go=document.createElement('button');go.type='submit';go.className='btn';go.textContent='Hádat';
+  form.appendChild(inp);form.appendChild(go);
+  const give=document.createElement('button');give.type='button';give.className='lnk';give.textContent='Nevím, ukaž řešení';
+  const list=document.createElement('div');list.className='guesses';list.style.cssText='max-height:170px;overflow:auto';
+  d.appendChild(cv);d.appendChild(cap);d.appendChild(form);d.appendChild(give);d.appendChild(list);
+  const seen=[];let won=false,t0=0;
+  const rankOf=k=>{if(rk[k])return rk[k];const sf=stemFind(k)||rootFind(k)||prefFind(k);return sf&&rk[sf]?Math.max(3,Math.round(rk[sf]*1.6)+1):Math.round(V.length*.9);};
+  const card=(w,r)=>{const h=heat(r),win=r===1,e=document.createElement('div');e.className='gs';e.style.setProperty('--hc',win?'#ffd34d':h[2]);
+    const a=document.createElement('div');a.className='gw';const b=document.createElement('b');b.textContent=w;const sp=document.createElement('span');sp.textContent=win?'Trůn je tvůj!':h[1];a.appendChild(b);a.appendChild(sp);
+    const bar=document.createElement('div');bar.className='gb';const i=document.createElement('i');i.style.width=(win?100:pctOf(r))+'%';bar.appendChild(i);e.appendChild(a);e.appendChild(bar);return e;};
+  const render=()=>{list.replaceChildren(...seen.slice().sort((a,b)=>a.r-b.r).map(x=>card(x.w,x.r)));};
+  const win=txt=>{won=true;cap.textContent=txt;inp.disabled=true;go.disabled=true;give.hidden=true;snd('win');setTimeout(()=>snd('grow'),500);t0=performance.now();};
+  form.addEventListener('submit',e=>{e.preventDefault();if(won)return;
+    const raw=inp.value.trim(),k=strip(raw).replace(/\s+/g,'');if(!k)return;
+    if(!/^[a-zA-ZÀ-ſ]{2,24}$/.test(raw)){cap.textContent='Tohle není slovo.';return;}
+    if(seen.some(x=>x.k===k)){cap.textContent='Tohle už jsi zkoušel.';return;}
+    const r=k===SW?1:rankOf(k);seen.push({k:k,w:raw.toLowerCase(),r:r});inp.value='';render();
+    if(r===1)win('Uhodnuto! Slovo je MEČ. Podívej, jak hrad roste.');else{snd('tick',r);cap.textContent=heat(r)[3];}});
+  give.addEventListener('click',()=>{if(!won){seen.push({k:SW,w:'meč',r:1});render();win('Řešení: MEČ. Hrad roste i tak.');}});
+  let raf=0,on=true,last=0;
+  const step=now=>{if(!on)return;
+    if(t0){const p=reduce?1:Math.min(1,(now-t0)/1400);D.disp=1-Math.pow(1-p,3);D.grow=p<1;}
+    if(now-last>=50||D.grow){last=now;drawScene(now/1000,D);}
+    raf=requestAnimationFrame(step);};
   raf=requestAnimationFrame(step);
   return()=>{on=false;cancelAnimationFrame(raf);};
 }
@@ -1000,15 +1088,14 @@ function openTut(i){
   if(t[2]==='scale'){const sc=document.createElement('div');sc.className='dsc';
     ST.slice().reverse().forEach(x=>{const c=document.createElement('span');c.textContent=x[1];c.style.setProperty('--hc',x[2]);sc.appendChild(c);});d.appendChild(sc);}
   const a=document.createElement('div');a.className='acts';
-  if(t[2]==='demo'){const cv=document.createElement('canvas');cv.className='demo';cv.setAttribute('role','img');cv.setAttribute('aria-label','Ukázka: hrad roste s každým uhodnutým slovem');
-    const cap=document.createElement('div');cap.className='dcap';d.appendChild(cv);d.appendChild(cap);demoStop=runDemo(cv,cap);}
+  if(t[2]==='try')demoStop=runTry(d);
   if(i>0)a.appendChild(tutBtn('Zpět','btn ghost',()=>openTut(i-1)));
   const last=i>=TUT.length-1;
   const nx=tutBtn(last?(fbUser?'Jdu hrát':'Přihlásit se'):'Další','btn',()=>{if(last)closeTut();else openTut(i+1);});a.appendChild(nx);
   if(!last)a.appendChild(tutBtn('Přeskočit','btn ghost',closeTut));
   d.appendChild(a);ov.appendChild(d);document.body.appendChild(ov);
   document.removeEventListener('keydown',tutKey);document.addEventListener('keydown',tutKey);
-  nx.focus();
+  if(t[2]!=='try')nx.focus();
 }
 
 /* ---------- přihlášení přes Google a ukládání postupu do účtu (Firebase) ---------- */
@@ -1039,7 +1126,7 @@ function cloudPush(){if(!fbUser||!fb)return;clearTimeout(syncT);syncT=setTimeout
 function applyState(){
   if(!ui.grow)ui.disp=Math.min(S.seenN==null?nWords():S.seenN,nWords());
   startDaily();
-  if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
+  if(S.day.won&&S.bonus&&S.bonus.key===todayKey()&&!S.bonus.done)startBonus();
   renderAll();updateNav();
   requestAnimationFrame(()=>{layout();redraw();if(stageVisible())startGrow();});
 }
@@ -1118,6 +1205,7 @@ function renderTools(){
   const el=$('tools');if(!el)return;el.innerHTML='';
   const mk=(t,f)=>{const b=document.createElement('button');b.type='button';b.className='tab';b.textContent=t;b.addEventListener('click',f);el.appendChild(b);};
   mk('? Jak hrát',()=>openTut(0));
+  mk(sndOn?'Zvuk: zap':'Zvuk: vyp',()=>{sndOn=!sndOn;try{localStorage.setItem('sk-snd',sndOn?'1':'0');}catch(e){}renderTools();if(sndOn)snd('tick',60);});
   mk('Přátelé'+(FR.inc.length?' ('+FR.inc.length+')':''),openFriends);
   if(fbUser)mk('Odhlásit ('+String(fbUser.displayName||fbUser.email||'účet').split(' ')[0].slice(0,14)+')',doLogout);
   else mk('Přihlásit přes Google',doLogin);
@@ -1352,9 +1440,13 @@ async function submit(e){
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
   C.st.g.push(k);gi.value='';setMsg('');
+  {const rr=k===C.word?1:(C.rk[k]||((C.st.x||{})[k]||{}).r||1500);snd(k===C.word?'win':'tick',rr);}
   if(aiFail){const er=String(window.lastAIError||'neznámá chyba');console.warn('AI hodnocení selhalo:',er);setMsg(/429|quota|exceeded/i.test(er)?'AI má vyčerpaný limit dotazů, zkus to za chvíli. Zatím je to hrubý odhad.':'AI neodpověděla: '+er.slice(0,160),9000);}
+  const nB=nWords();
   if(k===C.word){C.st.done=true;C.st.won=true;S.won++;if(C.mode==='daily')S.daily=(S.daily||0)+1;if(C.mode==='royal'){S.extra=(S.extra||0)+2;S.royalN=(S.royalN||0)+1;}markStreak();}
+  else if(C.mode==='royal'&&C.st.g.length>=ROYAL_MAX){C.st.done=true;C.st.won=false;}
   save();renderGuesses();renderAll();showResult();
+  {const rw=RW.find(r=>nB<r.n&&nWords()>=r.n);if(rw){setMsg('Nová odměna za '+rw.n+' slov: '+rw.t+'!',8000);setTimeout(()=>snd('reward'),700);}}
   if(k===C.word&&stageVisible())startGrow();
   gi.focus({preventScroll:true});
 }
@@ -1363,11 +1455,14 @@ function showResult(){
   $('gf').hidden=!!st.done;
   if(!st.done){resultEl.hidden=true;resultEl.innerHTML='';return;}
   if(st.won)h+='<p class="rt">'+(n<=3?'Skvěle!':n<=8?'Výborně!':'Uhodnuto!')+'</p><p>Slovo <b class="answer">'+cur.full.toUpperCase()+'</b> máš na '+n+'. pokus. '+(cur.mode==='royal'?'Královské slovo! Hrad roste o 3 patra a dostává zlatou ozdobu.':'Hrad naroste o jedno patro.')+'</p><p class="cd">Série: <b>'+streakNow()+'</b> '+cz(streakNow(),'den','dny','dní')+' v řadě.</p>';
-  else h+='<p class="rt">Tentokrát ne.</p><p>Hledané slovo: <b class="answer">'+cur.full.toUpperCase()+'</b></p>';
+  else h+='<p class="rt">Tentokrát ne.</p><p>'+(cur.mode==='royal'?'Došlo ti '+ROYAL_MAX+' pokusů. ':'')+'Hledané slovo: <b class="answer">'+cur.full.toUpperCase()+'</b></p>';
   h+='<div class="acts">';
   if(st.won)h+='<button class="btn" id="goBuild" type="button">Na hrad</button>';
-  if(EXTRA_WORDS)h+='<button class="btn ghost" id="goExtra" type="button">'+(cur.mode==='daily'?'Extra slovo':'Další extra slovo')+'</button>';
-  h+='</div><p class="cd">Nové slovo dne za <b id="cd"></b></p>';
+  const dayWon=!!(S.day&&S.day.won&&S.day.key===todayKey()),bonusDone=!!(S.bonus&&S.bonus.key===todayKey()&&S.bonus.done);
+  if(EXTRA_WORDS&&cur.mode!=='royal'&&dayWon&&!bonusDone)h+='<button class="btn ghost" id="goExtra" type="button">Extra slovo</button>';
+  h+='</div>';
+  if(cur.mode!=='royal'&&dayWon&&bonusDone)h+='<p>Slovo dne i extra slovo máš za sebou. Dnes už nic dalšího hádat nemůžeš.</p>';
+  h+='<p class="cd">Nové slovo dne za <b id="cd"></b></p>';
   resultEl.innerHTML=h;resultEl.hidden=false;
   const gb=$('goBuild');if(gb)gb.addEventListener('click',goBuild);
   const ge=$('goExtra');if(ge)ge.addEventListener('click',()=>{startBonus(false);});
@@ -1399,7 +1494,7 @@ $('gf').addEventListener('submit',submit);
 
 /* ---------- start ---------- */
 startDaily();
-if(S.day.done&&S.bonus&&!S.bonus.done)startBonus(true);
+if(S.day.won&&S.bonus&&S.bonus.key===todayKey()&&!S.bonus.done)startBonus();
 initCastle();
 renderTools();updUnk();
 {const eb=$('expUnk');if(eb)eb.addEventListener('click',expUnk);}
