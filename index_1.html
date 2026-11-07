@@ -810,9 +810,14 @@ if(!reduce)requestAnimationFrame(frame);
 <script type="module">
 /* Hodnocení neznámých slov přes Gemini (Firebase AI Logic). Když se nenačte, hra zkusí AI v náhledu Claude. */
 try{
-  const V='12.0.0',B='https://www.gstatic.com/firebasejs/'+V+'/';
-  const {initializeApp}=await import(B+'firebase-app.js');
-  const {getAI,getGenerativeModel,GoogleAIBackend}=await import(B+'firebase-ai.js');
+  const G='https://www.gstatic.com/firebasejs/12.12.0/',J='https://cdn.jsdelivr.net/npm/firebase@12.12.0/';
+  let FA=null,FI=null;
+  for(const u of [[G+'firebase-app.js',G+'firebase-ai.js'],[J+'app/+esm',J+'ai/+esm']]){
+    try{FA=await import(u[0]);FI=await import(u[1]);break;}catch(e){window.fbErr=String(e&&e.message||e).slice(0,160);FA=null;}
+  }
+  if(!FA)throw new Error(window.fbErr||'import');
+  const {initializeApp}=FA;
+  const {getAI,getGenerativeModel,GoogleAIBackend}=FI;
   const app=initializeApp({
     apiKey:"AIzaSyCGhP46ocFfvzGCd32Ll1niMnnAfUtvFas",
     authDomain:"prihoriva-efd4b.firebaseapp.com",
