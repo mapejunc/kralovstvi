@@ -849,10 +849,17 @@ function todayInfo(){const d=new Date();
   return{key:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),dn:Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5),d:d};}
 function setMsg(t,ms){msgEl.textContent=t;clearTimeout(msgT);if(ms)msgT=setTimeout(()=>{msgEl.textContent='';},ms);}
 function begin(){setMsg('');renderModes();renderGuesses();showResult();}
+/* losování slov bez opakování: použitá slova si pamatujeme, a až dojdou, začne se znovu */
+function pickIdx(skip){
+  const u=S.used||(S.used=[]);
+  [S.day&&S.day.i,S.bonus&&S.bonus.i].forEach(x=>{if(typeof x==='number'&&u.indexOf(x)<0)u.push(x);});
+  let pool=[];for(let i=0;i<SEC.length;i++)if(u.indexOf(i)<0&&i!==skip)pool.push(i);
+  if(!pool.length){S.used=[];for(let i=0;i<SEC.length;i++)if(i!==skip)pool.push(i);}
+  const i=pool[Math.floor(Math.random()*pool.length)];S.used.push(i);return i;}
 function startDaily(){
   const t=todayInfo();
-  if(!S.day||S.day.key!==t.key||!S.day.n){S.day={key:t.key,n:1,g:[],done:false,won:false,i:Math.floor(Math.random()*SEC.length)};save();}
-  if(S.day.i==null){S.day.i=S.day.g.length?wordIndexFor(t.dn):Math.floor(Math.random()*SEC.length);save();}
+  if(!S.day||S.day.key!==t.key||!S.day.n){S.day={key:t.key,n:1,g:[],done:false,won:false,i:pickIdx(-1)};save();}
+  if(S.day.i==null){S.day.i=S.day.g.length?wordIndexFor(t.dn):pickIdx(-1);save();}
   const k=SEC[S.day.i];
   cur={mode:'daily',word:k,full:VI[k].w,st:S.day,rk:rankFor(k)};
   $('gTitle').textContent='Slovo dne';
@@ -860,9 +867,9 @@ function startDaily(){
   begin();
 }
 function startBonus(resume){
-  if(!resume||!S.bonus||!S.bonus.n){
+  if(!resume||!S.bonus||!S.bonus.n||(!S.bonus.done&&!(S.bonus.g||[]).length)){
     const di=S.day&&S.day.i!=null?S.day.i:-1;let i;
-    do{i=Math.floor(Math.random()*SEC.length);}while(i===di||(S.bonus&&S.bonus.i===i));
+    i=pickIdx(di);
     S.bonus={i:i,n:1,g:[],done:false,won:false};save();
   }
   const k=SEC[S.bonus.i];
