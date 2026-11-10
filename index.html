@@ -237,6 +237,25 @@ h1{animation:glow 5s ease-in-out infinite}
 .demo{display:block;width:100%;max-width:288px;aspect-ratio:1;margin:2px auto;image-rendering:pixelated;box-shadow:0 0 0 3px #e0b050,0 0 0 5px #8a5a1c,0 0 0 8px var(--edge)}
 .dcap{min-height:44px;margin-top:8px;text-align:center;color:var(--gold);font-weight:600}
 </style>
+<style>
+/* mobil: živý pruh s hradem místo přepínače */
+.strip{display:none}
+@keyframes stripIn{from{opacity:0;transform:scale(1.5) translateY(30px)}to{opacity:1;transform:none}}
+@media (max-width:860px){
+  body[data-view="game"] .strip{display:flex}
+  .strip{flex:none;align-items:stretch;gap:12px;width:100%;padding:0;border:0;font:inherit;color:var(--parch);text-align:left;cursor:pointer;background:linear-gradient(#34283f,#2a2034);box-shadow:0 0 0 3px #e0b050,0 0 0 5px var(--edge);transform-origin:50% 0}
+  .strip canvas{width:140px;height:140px;flex:none;display:block;image-rendering:pixelated;background:#000}
+  .strip .si{display:flex;flex-direction:column;justify-content:center;gap:5px;padding:8px 12px 8px 0;min-width:0}
+  .strip .sm{font-size:40px;line-height:1;color:var(--gold);font-variant-numeric:tabular-nums;text-shadow:0 2px 0 #0f0a15}
+  .strip .sp{font-size:14px;color:var(--parch-dim)}
+  .strip .sg{font-size:15px;line-height:1.25}
+  .strip .sh{font-size:12px;color:var(--parch-dim);opacity:.8}
+  .strip.pop{animation:stripIn .6s ease-out}
+  #castleBack{display:none}
+  body[data-view="castle"] #castleBack{display:inline-block}
+  .nav{display:none !important}
+}
+</style>
 <div class="page">
   <header class="top">
     <div>
@@ -252,9 +271,10 @@ h1{animation:glow 5s ease-in-out infinite}
   </header>
 
   <main class="main" id="main">
+  <button class="strip" id="strip" type="button" aria-label="Otevřít celý hrad"><canvas id="stripC" width="144" height="144" aria-hidden="true"></canvas><div class="si"><b class="sm" id="stM"></b><span class="sp" id="stP"></span><span class="sg" id="stG"></span><span class="sh">Klepni pro celý hrad</span></div></button>
   <section class="castle" aria-label="Hrad">
     <div class="stage-head">
-      <div class="tabs"><button class="tab" id="goTop" type="button">Vršek</button><button class="tab" id="goBase" type="button">Základy</button></div>
+      <div class="tabs"><button class="tab" id="castleBack" type="button">← Hádání</button><button class="tab" id="goTop" type="button">Vršek</button><button class="tab" id="goBase" type="button">Základy</button></div>
       <div class="prog" id="prog"></div>
     </div>
     <div class="stage" id="stage">
@@ -298,7 +318,7 @@ const $=id=>document.getElementById(id);
 const strip=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
 
 /* ---------- zvuky (WebAudio, žádné soubory) ---------- */
-let sndOn=true;try{sndOn=localStorage.getItem('sk-snd')!=='0';}catch(e){}
+let sndOn=false;try{sndOn=localStorage.getItem('sk-snd')==='1';}catch(e){}
 let AC=null;
 function snd(type,r){
   if(!sndOn)return;
@@ -348,9 +368,9 @@ const MATS=[
  {n:'křišťálová',b:'#7c68a0',d:'#46385f',l:'#b48ae0',roof:'#7a4cb8',roofD:'#46385f'}];
 const matOf=j=>j<8?0:j<24?1:j<48?2:j<80?3:4;
 const floorW=j=>Math.max(28,46-2*Math.floor(j*.5));
-const LM=[{k:'kostel',n:'kostel',m:20,x:22,col:'#8a7aa8',al:.85},{k:'petrin',n:'Petřínská rozhledna',m:63,x:44,col:'#7a6aa0',al:.75},
-  {k:'eiffel',n:'Eiffelova věž',m:330,x:34,col:'#6a6290',al:.55},{k:'burj',n:'Burdž Chalífa',m:828,x:62,col:'#6f6a9a',al:.5},
-  {k:'snezka',n:'Sněžka',m:1603,x:20,col:'#6a6a90',al:.38},{k:'everest',n:'Mount Everest',m:8849,x:0,col:'#fff',al:0}];
+const LM=[{k:'kostel',n:'kostel',g:'kostela',m:20,x:22,col:'#8a7aa8',al:.85},{k:'petrin',n:'Petřínská rozhledna',g:'Petřínské rozhledny',m:63,x:44,col:'#7a6aa0',al:.75},
+  {k:'eiffel',n:'Eiffelova věž',g:'Eiffelovy věže',m:330,x:34,col:'#6a6290',al:.55},{k:'burj',n:'Burdž Chalífa',g:'Burdž Chalífy',m:828,x:62,col:'#6f6a9a',al:.5},
+  {k:'snezka',n:'Sněžka',g:'Sněžky',m:1603,x:20,col:'#6a6a90',al:.38},{k:'everest',n:'Mount Everest',g:'Mount Everestu',m:8849,x:0,col:'#fff',al:0}];
 
 /* odměny za počet uhodnutých slov */
 const RW=[{n:10,t:'sudy a bedny před branou'},{n:25,t:'horkovzdušný balón'},{n:50,t:'drak krouží nad věží'},{n:100,t:'ohňostroj nad hradem'}];
@@ -811,15 +831,15 @@ function drawScene(now,D){
   if(yh>=0&&yh<VH){for(let x=18;x<CX-(topW>>1)-3;x+=4)px(x,yh,2,1,'#ffd34d');
     const hv=Math.round(5*Ff);num(hv,CX-(topW>>1)-5-String(hv).length*4,yh-6,'#ffd34d');}
 }
-function redraw(){drawScene(reduce?1.3:(performance.now()-T0)/1000);}
+function redraw(){const t=reduce?1.3:(performance.now()-T0)/1000;drawScene(t);drawStrip(t);}
 const T0=performance.now();let last=0;
 function frame(now){
   if(ui.grow){
     const g=ui.grow,p=Math.min(1,(performance.now()-g.t0)/g.dur),e=1-Math.pow(1-p,3);
     ui.disp=g.from+(g.to-g.from)*e;stageEl.scrollTop=0;layout();
     if(p>=1){ui.disp=g.to;ui.grow=null;S.seenN=g.to;save();layout();renderPanel();updateNav();}
-    last=now;drawScene((now-T0)/1000);
-  }else if(!document.hidden&&now-last>=66){last=now;drawScene((now-T0)/1000);}
+    last=now;drawScene((now-T0)/1000);drawStrip((now-T0)/1000);
+  }else if(!document.hidden&&now-last>=66){last=now;drawScene((now-T0)/1000);drawStrip((now-T0)/1000);}
   requestAnimationFrame(frame);
 }
 
@@ -844,7 +864,8 @@ function renderStats(){
   $('stStreak').classList.toggle('has',streakDone()&&streakNow()>0);
   updateNav();
 }
-function renderProg(){const F=1+nWords();$('prog').textContent=F+'. patro · '+heightM()+' m';}
+function goalText(hm){const nx=LM.find(l=>l.m>hm);if(!nx)return'Jsi výš než Mount Everest.';const need=Math.ceil((nx.m-hm)/5);return'Ještě '+need+' '+cz(need,'slovo','slova','slov')+' do '+nx.g;}
+function renderProg(){const F=1+nWords();$('prog').textContent=F+'. patro · '+heightM()+' m · '+goalText(heightM());}
 function renderPanel(){
   const N=nWords(),hm=heightM(),F=1+N,mat=MATS[matOf(F-1)];
   const next=LM.find(l=>l.m>hm),passed=LM.filter(l=>l.m<=hm);
@@ -1189,7 +1210,7 @@ function showGate(mode,note){
   }
   gateEl.replaceChildren(d);
 }
-function hideGate(){if(gateEl){gateEl.remove();gateEl=null;gateMode='';}}
+function hideGate(){if(gateEl){gateEl.remove();gateEl=null;gateMode='';if(!introShown){introShown=true;setTimeout(peek,150);}}}
 async function gateLogin(){
   showGate('loading','Čekám na přihlášení…');
   try{
@@ -1435,7 +1456,7 @@ async function submit(e){
     }
     if(!r){const dv=rootFind(k)||prefFind(k);
       if(dv&&C.rk[dv]){r={real:true,rank:Math.max(3,Math.round(C.rk[dv]*1.6)+1),hint:'Příbuzné slovu „'+VI[dv].w+'“.'};}
-      else{aiFail=USE_AI;r={real:true,rank:Math.round(V.length*.9),hint:aiFail?'AI nedostupná, hrubý odhad.':''};}}
+      else{aiFail=USE_AI;r={real:true,rank:Math.round(V.length*.9),hint:aiFail?'AI nedostupná, hrubý odhad.':'Tohle slovo hra nezná, zkus jiné.'};}}
     if(!C.rk[k])logUnknown(raw.toLowerCase());
     C.st.x=C.st.x||{};C.st.x[k]={w:raw.toLowerCase(),r:r.rank,h:r.hint};
   }
@@ -1448,6 +1469,7 @@ async function submit(e){
   save();renderGuesses();renderAll();showResult();
   {const rw=RW.find(r=>nB<r.n&&nWords()>=r.n);if(rw){setMsg('Nová odměna za '+rw.n+' slov: '+rw.t+'!',8000);setTimeout(()=>snd('reward'),700);}}
   if(k===C.word&&stageVisible())startGrow();
+  if(k===C.word&&isMobile())setTimeout(()=>{if(cur===C&&document.body.dataset.view==='game')setView('castle');},1200);
   gi.focus({preventScroll:true});
 }
 function showResult(){
@@ -1491,6 +1513,34 @@ function tick(){
 }
 
 $('gf').addEventListener('submit',submit);
+
+/* ---------- mobil: živý pruh s hradem, krátký pohled na království ---------- */
+let introShown=false,peekT=0,leftAt=0;
+const stripEl=$('strip'),stripC=$('stripC'),sctx=stripC.getContext('2d'),offC=document.createElement('canvas');offC.width=VW;offC.height=VH;
+const octx=offC.getContext('2d');let stripTxt='';
+function drawStrip(now){
+  if(!isMobile()||document.body.dataset.view!=='game')return;
+  drawScene(now,{ctx:octx,disp:ui.disp,sn:streakNow(),royal:S.royalN||0,grow:!!ui.grow});
+  sctx.imageSmoothingEnabled=false;sctx.drawImage(offC,0,0);
+  const hm=Math.round(5*(1+Math.floor(ui.disp+1e-6))),F=1+Math.floor(ui.disp+1e-6),tx=hm+'|'+F+'|'+nWords();
+  if(tx!==stripTxt){stripTxt=tx;$('stM').textContent=hm+' m';$('stP').textContent=F+'. patro';$('stG').textContent=goalText(hm);}
+}
+function endPeek(){
+  if(!document.body.classList.contains('peeking'))return;
+  clearTimeout(peekT);
+  if(ui.grow){peekT=setTimeout(endPeek,500);return;}
+  document.body.classList.remove('peeking');setView('game');
+  stripEl.classList.add('pop');setTimeout(()=>stripEl.classList.remove('pop'),700);
+}
+function peek(){
+  if(!isMobile()||gateMode||tutEl||document.body.dataset.view!=='game')return;
+  clearTimeout(peekT);document.body.classList.add('peeking');setView('castle');peekT=setTimeout(endPeek,2600);
+}
+stripEl.addEventListener('click',()=>setView('castle'));
+$('castleBack').addEventListener('click',()=>{clearTimeout(peekT);document.body.classList.remove('peeking');setView('game');});
+stageEl.addEventListener('click',endPeek);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)leftAt=Date.now();else if(leftAt&&Date.now()-leftAt>15000)peek();});
+if(!/[?&]dev/.test(location.search)){const eb=$('expUnk');if(eb)eb.style.display='none';}
 
 /* ---------- start ---------- */
 startDaily();
